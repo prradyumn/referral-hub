@@ -1,8 +1,9 @@
 import { Pool } from "pg";
 
 // Vercel runs each function in its own short-lived process, so a large pool per
-// instance exhausts Postgres quickly. Keep it small and point DATABASE_URL at
-// Supabase's transaction-mode pooler (port 6543), not the direct 5432 port.
+// instance exhausts Postgres quickly. Keep it small, and if your provider offers
+// a connection pooler (Neon's pooled host, PgBouncer), point DATABASE_URL at it
+// rather than the direct connection.
 declare global {
   // eslint-disable-next-line no-var
   var __referralHubPool: Pool | undefined;
@@ -17,8 +18,7 @@ function getPool(): Pool {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
     throw new Error(
-      "DATABASE_URL is not set. Copy it from Supabase → Project Settings → " +
-        "Database → Connection string → Transaction pooler.",
+      "DATABASE_URL is not set. Set it to your Postgres connection string.",
     );
   }
 

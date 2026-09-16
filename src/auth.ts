@@ -2,9 +2,7 @@ import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 
 export const ALLOWED_EMAIL_DOMAIN =
-  process.env.ALLOWED_EMAIL_DOMAIN ??
-  process.env.NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN ??
-  "convegenius.ai";
+  process.env.ALLOWED_EMAIL_DOMAIN ?? "convegenius.ai";
 
 function isWorkAddress(email: string | null | undefined): boolean {
   if (!email) return false;

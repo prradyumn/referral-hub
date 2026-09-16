@@ -1,7 +1,7 @@
 -- Ten open roles, carried over from the prototype so Phase 0 has real
 -- content to browse. Replace with the ATS sync in Phase 1.
 
-insert into public.jobs
+insert into jobs
   (req_id, title, department, location, experience_band, is_priority, reward_amount, eligibility_days, summary, skills, posted_on)
 values
   ('CG-1042','Senior Program Manager','Programs','Delhi','5-8 yrs',true,20000,30,

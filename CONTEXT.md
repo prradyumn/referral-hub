@@ -7,7 +7,7 @@ are, what is decided, what is not, and what every remaining phase contains.
 | | |
 | --- | --- |
 | Last updated | 16 September 2026 |
-| Phase | 0 complete (auth + refer + track), Phase 1 not started |
+| Phase | **0 running end to end on Neon, verified 16 Sep 2026.** Phase 1 not started |
 | Auth | **Auth.js (NextAuth v5) + Google, JWT sessions.** Supabase Auth was removed on 16 Sep 2026 |
 | Local path | `/Users/pradyumnawasthi/Downloads/referral-hub` |
 | Owner | Pradyumn Awasthi (pradyumn@convegenius.ai) |
@@ -114,24 +114,33 @@ referral status stays at `submitted` forever.
 Nothing here is secret except where noted. Secrets live in `.env.local` (gitignored) and
 in Vercel's environment variables.
 
-### Supabase
+### Database — Neon
+
+Supabase was dropped entirely on 16 September 2026. Auth went first (to Auth.js), and the
+database followed, because a Vercel-managed Neon store injects `DATABASE_URL` into the
+project automatically — no password to copy between dashboards, and no free-plan pause.
 
 | | |
 | --- | --- |
-| Project name | `referral-hub` |
-| Project ref | `qnskrjxzeuuysbviqxhd` |
-| URL | `https://qnskrjxzeuuysbviqxhd.supabase.co` |
-| Region | South Asia (Mumbai), `ap-south-1` |
-| Plan | **Free — must move to Pro before any pilot (see §11)** |
-| Org | prradyumn's Org |
-| Role | **Database only.** Supabase Auth, PostgREST and the API keys are no longer used |
-| Connection | Supavisor **transaction pooler**, port 6543 — never the direct 5432 |
-| Automatic RLS | Event trigger still enabled for new tables; the six existing tables have RLS off (see §6) |
+| Provider | Neon, attached through the Vercel marketplace integration |
+| Store | `neon-aquamarine-chair` · Neon ID `lively-grass-21104118` |
+| Plan | Free — 0.5 GB storage, 100 compute-hours/month. Sleeps when idle, wakes on connect; nothing is deleted |
+| Region | **Washington DC, `iad1`** — see the note below |
+| Connection | Always the **pooled** `DATABASE_URL`, never `DATABASE_URL_UNPOOLED` |
+| Injected into | Vercel Preview and Production automatically, as integration-managed secrets |
+| Local | Copy the `.env.local` snippet from Vercel → Storage → the store → Getting Started |
 
-**No Supabase API key appears anywhere in the app.** The only database credential is
-`DATABASE_URL`, which is server-side and secret. The publishable key still exists in the
-dashboard and still reaches PostgREST — which is exactly why migration `0003` had to
-revoke EXECUTE from `public`. See §8.
+The integration also injects `POSTGRES_URL`, `PGHOST`, `PGPASSWORD` and a dozen more
+aliases. The app reads **only** `DATABASE_URL`; ignore the rest.
+
+**The region is worth revisiting.** Every user is in India and the database is in
+Virginia, which adds roughly 250 ms round trip per query — noticeable on a page that runs
+three. Neon has a Singapore region. Moving means recreating the store and re-running
+`npm run db:apply`, which is ten minutes, so do it before there is real data rather than
+after.
+
+**Supabase project `qnskrjxzeuuysbviqxhd` still exists** and still holds the old schema.
+Nothing points at it. Delete it once the Neon cutover has been used for a week.
 
 ### Google Cloud
 
@@ -201,7 +210,7 @@ redeployed.
 
 Next.js 16 (App Router) · React 19 · TypeScript 5.9 · Tailwind CSS 4 · **Auth.js v5**
 (NextAuth beta — JWT sessions, no database adapter) · **node-postgres** straight to
-Postgres on Supabase · Zod. Chosen to match ConveGenius's existing Node/TypeScript skills.
+Postgres on Neon · Zod. Chosen to match ConveGenius's existing Node/TypeScript skills.
 
 ```
 referral-hub/
@@ -210,12 +219,11 @@ referral-hub/
 ├── .env.local                        ← secrets, gitignored
 ├── .env.local.bak-supabase           ← pre-migration copy, also gitignored
 ├── .env.example
-├── supabase/
-│   ├── migrations/
-│   │   ├── 0001_init.sql                       ← tables, functions, RLS (since undone)
-│   │   ├── 0002_remove_supabase_auth.sql       ← revokes, RLS off, submit_referral v2
-│   │   └── 0003_revoke_function_execute.sql    ← the EXECUTE hole 0002 left open
-│   └── seed.sql                      ← ten open roles
+├── db/
+│   ├── 0001_schema.sql               ← the whole schema, plain PostgreSQL 14+
+│   └── 0002_seed.sql                 ← ten open roles
+├── scripts/
+│   └── apply-schema.mjs              ← npm run db:apply — applies db/*.sql in order
 └── src/
     ├── auth.ts                       ← Auth.js config: Google, hd hint, domain callback
     ├── proxy.ts                      ← route gating (Next 16's name for middleware.ts)
@@ -375,6 +383,26 @@ succeeded in 24 hours raises an alert.
 
 Do not rediscover these.
 
+**A secret copied out of prose brings the full stop with it.** `GOCSPX-…tavv.` is 36
+characters; a Google client secret is 35. Google answers `invalid_client: The provided
+client secret is invalid`, which reads like a wrong or revoked key and sends you back to
+the console to regenerate one. It cost an hour. `npm run env:set` now strips trailing
+punctuation and warns on the wrong length — use it rather than editing `.env.local` by
+hand.
+
+**Check the dev server log before theorising.** `.next/dev/logs/next-development.log`
+carries the `[auth][details]` line with Google's actual error. `client_secret is missing`
+and `The provided client secret is invalid` are different faults; the browser shows the
+same "Sign-in is not configured correctly" for both.
+
+**`next dev` will not start twice in one folder.** It reports the running PID and exits, so
+a pasted `npm run dev` after an earlier one looks like it worked and silently leaves the
+old process serving stale config. `kill <pid>` first.
+
+**TextEdit is not a reliable way to edit `.env.local`.** A paste that is never saved leaves
+the file untouched and the failure looks identical to a wrong value. Check the file's
+modification time before believing an edit landed.
+
 **Postgres grants EXECUTE on every new function to the pseudo-role `PUBLIC`.** Tables have
 no such default — which is why revoking table privileges from `anon` and `authenticated`
 worked while the identical statement on functions did nothing. Those roles inherit from
@@ -519,24 +547,29 @@ money, or what we may legally store. The full log with space to answer is linked
 
 ---
 
-## 11. Infrastructure — the one thing that must change before a pilot
+## 11. Infrastructure
 
-**The Supabase free plan is not viable.** Free projects pause after one week of
-inactivity, keep no backups, hold 500 MB of database and 1 GB of files, and retain logs
-for one day. A referral programme has quiet weeks. A paused project means an employee
-opens the Hub and it is simply gone, and a database holding payout records with no backups
-is not defensible.
+The Supabase free-plan problem — projects pause after a week of inactivity, no backups —
+was the reason this section existed. Moving to Neon removed it: a Neon free database
+sleeps when idle and wakes on the next connection, and nothing is deleted.
 
-Move to **Pro, $25/month per project**: 8 GB database, 100 GB file storage, 250 GB egress,
-daily backups kept 7 days, 7-day log retention, never paused. **Budget two projects —
-staging and production.**
+What is still owed before a pilot:
+
+- **A staging database.** One Neon store per environment; Preview deployments should not
+  write to production rows.
+- **Backups with a tested restore.** Neon's free tier keeps a 24-hour restore window.
+  That is not enough for payout records — either move to Neon's paid tier or run a
+  nightly `pg_dump` to object storage. Untested backups do not count.
+- **Somewhere for résumés.** Phase 0.5 needs a private file store with signed URLs.
+  Supabase Storage was the plan; Vercel Blob is the obvious replacement now.
+- **The region question in §4.**
 
 ### Running cost, steady state
 
 | Line | Monthly (USD) |
 | --- | --- |
-| Supabase production (Pro) | 25 |
-| Supabase staging (Pro) | 25 |
+| Database, production (Neon paid) | 19 |
+| Database, staging | 0–19 |
 | Application hosting | 20 |
 | Worker container | 10 |
 | Transactional email | 20 |
@@ -670,24 +703,27 @@ added to the end.
 
 ## 15. Immediate next actions
 
-**Blocking the deployed app — Pradyumn, minutes each:**
+**To get Phase 0 running locally — two pastes and two commands:**
 
-1. Paste the database password into `DATABASE_URL`, and the Google client secret (the one
-   ending `9qk0`) into `AUTH_GOOGLE_SECRET`, in `.env.local`.
-2. Add `AUTH_SECRET`, `AUTH_GOOGLE_SECRET`, `DATABASE_URL` and
-   `NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN` to Vercel as Secret-type variables, delete
-   `NEXT_PUBLIC_SITE_URL`, push the Auth.js code and redeploy. Production returns 500
-   until this is done.
-3. Delete the stale Google OAuth secret (`****g80a`) and the dead Supabase redirect URI
-   `https://qnskrjxzeuuysbviqxhd.supabase.co/auth/v1/callback`.
+1. `DATABASE_URL` into `.env.local` — Vercel → Storage → the Neon store → Getting
+   Started → the **.env.local** tab → **Copy Snippet**. Pooled, not unpooled.
+2. `AUTH_GOOGLE_SECRET` into `.env.local` — Google shows a secret once, at creation.
+3. `npm run db:apply` — creates the schema and seeds ten roles against Neon.
+4. `npm run dev`, then sign in at localhost:3000 with a work Google account.
+
+**Before deploying:** add `AUTH_SECRET` and `AUTH_GOOGLE_SECRET` to Vercel (the Neon
+variables and `AUTH_GOOGLE_ID`, `ALLOWED_EMAIL_DOMAIN`, `NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN`
+are already there), delete the unused `NEXT_PUBLIC_SITE_URL`, and push. Use the
+**Import .env** button rather than adding variables one at a time.
 
 **Then, in priority order:**
 
-4. Get §10 in front of HR. **D02, D04, D10, D11 and D12 are the ones that stall
+5. Delete the stale Google OAuth secret and the dead Supabase redirect URI on the OAuth
+   client; delete the Supabase project once Neon has been used for a week.
+6. Get §10 in front of HR. **D02, D04, D10, D11 and D12 are the ones that stall
    engineering.**
-5. Confirm which ATS, HRMS, payroll and procurement systems are in use, and who owns the
+7. Confirm which ATS, HRMS, payroll and procurement systems are in use, and who owns the
    credentials. Start this on day one — it is the critical path.
-6. Finance to confirm the tax treatment in writing (D13).
-7. Move Supabase to Pro and stand up a staging project.
-8. Configure real SMTP before Phase 1 notifications.
-9. Build Phase 0.5 while the above is being chased — none of it is blocked by HR.
+8. Finance to confirm the tax treatment in writing (D13).
+9. Settle the Neon region, staging database and backup questions in §11.
+10. Build Phase 0.5 while the above is being chased — none of it is blocked by HR.
