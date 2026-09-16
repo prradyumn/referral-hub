@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { signOut } from "@/auth";
+import { requireEmployee } from "@/lib/employees";
 import { initials } from "@/lib/format";
 
 const NAV = [
@@ -11,20 +11,8 @@ const NAV = [
 export default async function AppLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) redirect("/login");
-
-  const { data: employee } = await supabase
-    .from("employees")
-    .select("full_name, email, department, location")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  const name = employee?.full_name || employee?.email?.split("@")[0] || "there";
+  const employee = await requireEmployee();
+  const name = employee.full_name || employee.email.split("@")[0] || "there";
 
   return (
     <div className="min-h-screen">
@@ -52,11 +40,16 @@ export default async function AppLayout({
           <div className="ml-auto flex items-center gap-3">
             <span
               className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--color-brand-soft)] text-[12px] font-semibold text-[var(--color-brand)]"
-              title={employee?.email ?? ""}
+              title={employee.email}
             >
               {initials(name)}
             </span>
-            <form action="/auth/signout" method="post">
+            <form
+              action={async () => {
+                "use server";
+                await signOut({ redirectTo: "/login" });
+              }}
+            >
               <button
                 type="submit"
                 className="text-[13px] text-[var(--color-ink-3)] transition hover:text-[var(--color-ink)]"

@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { query } from "@/lib/db";
+import { requireEmployee } from "@/lib/employees";
 import { rupees } from "@/lib/format";
 
 type Job = {
@@ -21,19 +22,26 @@ export default async function RolesPage({
 }: {
   searchParams: Promise<Search>;
 }) {
+  // Every page under (app) must establish the caller itself now that there is
+  // no row-level security standing behind the query.
+  await requireEmployee();
+
   const sp = await searchParams;
-  const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("jobs")
-    .select(
-      "id, req_id, title, department, location, experience_band, is_priority, reward_amount, summary",
-    )
-    .eq("is_open", true)
-    .order("is_priority", { ascending: false })
-    .order("posted_on", { ascending: false });
+  let all: Job[] = [];
+  let error: string | null = null;
+  try {
+    all = await query<Job>(
+      `select id, req_id, title, department, location, experience_band,
+              is_priority, reward_amount, summary
+         from public.jobs
+        where is_open
+        order by is_priority desc, posted_on desc`,
+    );
+  } catch (e) {
+    error = e instanceof Error ? e.message : "Unknown error";
+  }
 
-  const all: Job[] = data ?? [];
   const departments = [...new Set(all.map((j) => j.department))].sort();
   const locations = [...new Set(all.map((j) => j.location))].sort();
 
@@ -60,7 +68,7 @@ export default async function RolesPage({
 
       {error && (
         <p className="card mb-5 border-[var(--color-danger)] bg-[var(--color-danger-soft)] p-4 text-[14px] text-[var(--color-danger)]">
-          Could not load roles: {error.message}
+          Could not load roles: {error}
         </p>
       )}
 

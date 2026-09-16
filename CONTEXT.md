@@ -8,6 +8,7 @@ are, what is decided, what is not, and what every remaining phase contains.
 | --- | --- |
 | Last updated | 16 September 2026 |
 | Phase | 0 complete (auth + refer + track), Phase 1 not started |
+| Auth | **Auth.js (NextAuth v5) + Google, JWT sessions.** Supabase Auth was removed on 16 Sep 2026 |
 | Local path | `/Users/pradyumnawasthi/Downloads/referral-hub` |
 | Owner | Pradyumn Awasthi (pradyumn@convegenius.ai) |
 | Companion docs | Build spec and decision log — see §14 |
@@ -71,27 +72,32 @@ easier with more infrastructure.
 
 ### Working end to end
 
-- Sign-in by **Google** (work accounts only) and by **email magic link**
-- Employee record created automatically on first sign-in, domain enforced in the database
+- Sign-in by **Google**, work accounts only, through Auth.js. The `hd` hint narrows the
+  Google account chooser, the `signIn` callback rejects any other domain, and a database
+  trigger rejects it a third time
+- Employee record created or matched on first sign-in by `currentEmployee()`, upserting on
+  email
 - Ten seeded open roles, browsable with search and filters
 - Two-step referral submission with real validation and candidate consent capture
 - Duplicate detection at submit, which never reveals who referred first
-- "My referrals" list, scoped to the signed-in employee by row-level security
+- "My referrals" list, scoped to the signed-in employee in the query itself
 
 ### Verified, not assumed
 
-Row-level security was tested against the live database with the app's own key, signed
-out:
+Supabase Auth was removed on 16 September 2026 by migrations `0002` and `0003`. The app
+holds no Supabase API key at all; it talks to Postgres directly over the pooler with a
+password that never reaches the browser. The published `anon` and `authenticated` roles
+were stripped of every privilege in `public`, and that was proved with a live PostgREST
+call using the publishable key:
 
-| Probe | Result |
+| Probe (publishable key, PostgREST) | Result |
 | --- | --- |
-| Read `jobs` | `200 []` — 10 rows exist, none visible |
-| Read `referrals` | `200 []` |
-| Insert a candidate directly | `401` — RLS policy violation |
-| Call `submit_referral` | `401` — "You must be signed in to refer someone" |
+| Read `jobs`, `employees`, `referrals`, `candidates` | `401` `42501` on every one |
+| Call `submit_referral` | `401` — "permission denied for function submit_referral" |
 
-Also verified: 6 tables, all 6 with RLS enabled, 6 policies, 6 functions, the sign-up
-trigger present, 10/10 roles seeded, and the normalisers behaving
+RLS was verified the same way before the migration. It is now gone by design — see §6.
+
+Also verified: 6 tables, 10/10 roles seeded, and the normalisers behaving
 (`09876543210` → `+919876543210`; `  Priya.Sharma+jobs@Example.COM ` →
 `priya.sharma@example.com`).
 
@@ -106,7 +112,7 @@ referral status stays at `submitted` forever.
 ## 4. Live environment
 
 Nothing here is secret except where noted. Secrets live in `.env.local` (gitignored) and
-in the Supabase dashboard.
+in Vercel's environment variables.
 
 ### Supabase
 
@@ -118,14 +124,14 @@ in the Supabase dashboard.
 | Region | South Asia (Mumbai), `ap-south-1` |
 | Plan | **Free — must move to Pro before any pilot (see §11)** |
 | Org | prradyumn's Org |
-| Auth providers enabled | Email (magic link), Google |
-| Site URL | `http://localhost:3000` |
-| Redirect allow-list | `http://localhost:3000/auth/callback` |
-| Automatic RLS | Enabled (event trigger on new public tables) |
+| Role | **Database only.** Supabase Auth, PostgREST and the API keys are no longer used |
+| Connection | Supavisor **transaction pooler**, port 6543 — never the direct 5432 |
+| Automatic RLS | Event trigger still enabled for new tables; the six existing tables have RLS off (see §6) |
 
-The API key is the newer **publishable key** (`sb_publishable_…`), not the legacy anon
-key. It sits in `NEXT_PUBLIC_SUPABASE_ANON_KEY` — the variable name is legacy, the key
-works the same. It is safe in the browser; RLS protects the data, not the key.
+**No Supabase API key appears anywhere in the app.** The only database credential is
+`DATABASE_URL`, which is server-side and secret. The publishable key still exists in the
+dashboard and still reaches PostgREST — which is exactly why migration `0003` had to
+revoke EXECUTE from `public`. See §8.
 
 ### Google Cloud
 
@@ -136,9 +142,11 @@ works the same. It is safe in the browser; RLS protects the data, not the key.
 | Consent screen | **Internal** — only convegenius.ai accounts, no Google verification needed |
 | App name shown to users | ConveGenius Referral Hub |
 | Support + contact email | pradyumn@convegenius.ai |
-| OAuth client | `Referral Hub (Supabase)`, type Web application |
+| OAuth client | `Referral Hub (Supabase)`, type Web application — the name is now historical |
 | Client ID | `515322592770-1111n28bcp5d0h3c6k13d91ffhm6ihn9.apps.googleusercontent.com` |
-| Authorised redirect URI | `https://qnskrjxzeuuysbviqxhd.supabase.co/auth/v1/callback` |
+| Redirect URI — local | `http://localhost:3000/api/auth/callback/google` |
+| Redirect URI — production | `https://referral-hub-prradyumns-projects.vercel.app/api/auth/callback/google` |
+| Redirect URI — dead | `https://qnskrjxzeuuysbviqxhd.supabase.co/auth/v1/callback` — remove it |
 | Scopes | `email profile` only |
 
 **Internal was only available because the project sits inside the convegenius.ai
@@ -153,51 +161,80 @@ future rotation.
 ### Environment variables
 
 ```
-NEXT_PUBLIC_SUPABASE_URL=https://qnskrjxzeuuysbviqxhd.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_…
+DATABASE_URL=postgresql://postgres.qnskrjxzeuuysbviqxhd:PASSWORD@aws-0-ap-south-1.pooler.supabase.com:6543/postgres
+AUTH_SECRET=…                    # openssl rand -base64 32
+AUTH_GOOGLE_ID=515322592770-….apps.googleusercontent.com
+AUTH_GOOGLE_SECRET=…
+ALLOWED_EMAIL_DOMAIN=convegenius.ai
 NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN=convegenius.ai
-NEXT_PUBLIC_SITE_URL=http://localhost:3000
+# AUTH_URL=https://…             # set in production if the public origin differs
 ```
 
-`NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN` must match the `allowed_email_domain` row in
-`app_settings`. The app checks it for a friendly error; the database enforces it.
+The first four are **secrets** — never `NEXT_PUBLIC_`, never committed.
+`NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN` is the only one the browser sees, and it exists purely
+to show a friendly error before the round trip. `ALLOWED_EMAIL_DOMAIN` must match the
+`allowed_email_domain` row in `app_settings`; the database enforces it regardless.
+
+`.env.local.bak-supabase` holds the pre-migration file. `.gitignore` now covers `.env*`,
+which it did not before — the old patterns `.env.local` and `.env*.local` both missed that
+backup.
+
+### Vercel
+
+| | |
+| --- | --- |
+| Project | `referral-hub` · `prj_49WsgTQyLmNoGXGUM3x6zvfrJkcd` |
+| Team | `prradyumns-projects` · `team_9BT0BbrkpDS9X5pv1EsmzpHd` (Hobby) |
+| Production URL | `https://referral-hub-prradyumns-projects.vercel.app` |
+| Deployment Protection | **Off** — disabled 16 Sep 2026, see §8 for how |
+| Env vars set | `ALLOWED_EMAIL_DOMAIN`, `AUTH_GOOGLE_ID` |
+| Env vars still owed | `AUTH_SECRET`, `AUTH_GOOGLE_SECRET`, `DATABASE_URL`, `NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN` |
+| Removed | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` |
+
+`NEXT_PUBLIC_SITE_URL` is still set and no longer read by anything — delete it.
+**Production returns 500** until the four owed variables are added and the project is
+redeployed.
 
 ---
 
 ## 5. Stack and repo layout
 
-Next.js 16 (App Router) · React 19 · TypeScript 5.9 · Tailwind CSS 4 · Postgres on
-Supabase · Zod. Chosen to match ConveGenius's existing Node/TypeScript skills.
+Next.js 16 (App Router) · React 19 · TypeScript 5.9 · Tailwind CSS 4 · **Auth.js v5**
+(NextAuth beta — JWT sessions, no database adapter) · **node-postgres** straight to
+Postgres on Supabase · Zod. Chosen to match ConveGenius's existing Node/TypeScript skills.
 
 ```
 referral-hub/
 ├── CONTEXT.md                        ← this file
 ├── README.md                         ← how to set up and run
 ├── .env.local                        ← secrets, gitignored
+├── .env.local.bak-supabase           ← pre-migration copy, also gitignored
 ├── .env.example
 ├── supabase/
-│   ├── migrations/0001_init.sql      ← tables, RLS, trigger, submit_referral
+│   ├── migrations/
+│   │   ├── 0001_init.sql                       ← tables, functions, RLS (since undone)
+│   │   ├── 0002_remove_supabase_auth.sql       ← revokes, RLS off, submit_referral v2
+│   │   └── 0003_revoke_function_execute.sql    ← the EXECUTE hole 0002 left open
 │   └── seed.sql                      ← ten open roles
 └── src/
-    ├── proxy.ts                      ← session refresh + route protection
+    ├── auth.ts                       ← Auth.js config: Google, hd hint, domain callback
+    ├── proxy.ts                      ← route gating (Next 16's name for middleware.ts)
     ├── middleware.ts                 ← DOES NOT EXIST; Next 16 renamed it to proxy.ts
     ├── lib/
-    │   ├── supabase/client.ts        ← browser client
-    │   ├── supabase/server.ts        ← server component / route handler client
-    │   ├── supabase/session.ts       ← updateSession(), called by proxy.ts
+    │   ├── db.ts                     ← lazy pg.Pool on the pooler, Node runtime only
+    │   ├── employees.ts              ← currentEmployee(), requireEmployee()
     │   ├── validation.ts             ← Zod schema, CONSENT_NOTICE, phone formatting
     │   └── format.ts                 ← rupees(), shortDate(), initials()
     └── app/
         ├── layout.tsx  globals.css  page.tsx
-        ├── login/page.tsx            ← Google + magic link, domain guard, error display
-        ├── auth/callback/route.ts    ← code exchange, forwards provider errors
-        ├── auth/signout/route.ts
+        ├── login/page.tsx            ← Google button, domain hint, error display
+        ├── api/auth/[...nextauth]/route.ts   ← Auth.js handlers
         └── (app)/
-            ├── layout.tsx            ← signed-in shell, redirects if no user
+            ├── layout.tsx            ← signed-in shell, requireEmployee()
             ├── roles/page.tsx        ← server component, GET-form filters
             ├── refer/page.tsx        ← loads jobs, renders the form
             ├── refer/ReferralForm.tsx← two-step client form
-            ├── refer/actions.ts      ← server action → submit_referral RPC
+            ├── refer/actions.ts      ← server action → submit_referral
             └── referrals/page.tsx    ← own referrals only
 ```
 
@@ -220,7 +257,7 @@ rewrites history.
 | Table | Holds | Notes |
 | --- | --- | --- |
 | `app_settings` | key/value programme config | `allowed_email_domain`, `referral_validity_months` |
-| `employees` | id (= `auth.users.id`), email, name, department, location | Phase 1 replaces with HRMS sync |
+| `employees` | id (`gen_random_uuid()`), email, name, department, location | Created on first sign-in by `currentEmployee()`. Phase 1 replaces with HRMS sync |
 | `jobs` | req id, title, dept, location, experience, priority, reward, eligibility days, summary, skills | Phase 1 replaces with ATS sync |
 | `candidates` | name, normalised email, E.164 phone, org, designation, LinkedIn | **The PII boundary.** Retention rules apply here first |
 | `referrals` | referrer, candidate, job, relationship, status, timestamps, validity, **reward + eligibility snapshot**, **consent text + timestamp** | One row per submission |
@@ -231,45 +268,61 @@ rewrites history.
 | Function | Purpose |
 | --- | --- |
 | `setting(key)` | Reads `app_settings`. Config, never constants in code |
-| `handle_new_user()` | Trigger on `auth.users`. Enforces the email domain, creates the `employees` row |
+| `enforce_employee_domain()` | Trigger on `employees`. Rejects any email outside `allowed_email_domain` |
 | `normalise_email(text)` | Lowercase, trim, strip plus-addressing |
 | `normalise_phone(text)` | Indian mobile → E.164 |
 | `submit_referral(…)` | **The only way a referral can be created** |
 
-### Row-level security
+### Access control — there is no RLS any more
 
-| Table | Who can read | Who can write |
-| --- | --- | --- |
-| `employees` | own row | own row (update) |
-| `jobs` | any authenticated user, open roles only | nobody |
-| `candidates` | only via a referral you made | **nobody** |
-| `referrals` | only your own | **nobody** |
-| `referral_stages` | only for your own referrals | **nobody** |
+RLS was the enforcement layer while Supabase Auth issued the JWTs. Auth.js puts no
+`auth.uid()` into the database session, so RLS has nothing left to key on. Migration
+`0002` dropped all six policies and disabled RLS on all six tables; `0002` and `0003`
+together revoked every privilege on tables, sequences and functions — and `USAGE` on the
+`public` schema — from `anon` and `authenticated`.
 
-**There is deliberately no insert policy on `candidates`, `referrals` or
-`referral_stages`.** Writes happen exclusively inside `submit_referral`, which is
-`SECURITY DEFINER`. This is what makes the duplicate check impossible to bypass — you
-cannot skip it by writing to the table directly. Keep it that way.
+**The enforcement layer is now the application server.** The `DATABASE_URL` role is the
+only identity that can read or write, it never reaches the browser, and every query lives
+in server-only code that filters by the signed-in employee's id. Four rules keep that
+honest:
+
+- `src/lib/db.ts` is Node-runtime only and must never be imported by a client component
+- Every `referrals` and `candidates` query carries an explicit `referrer_id = $n`. There
+  is no safety net underneath it any more
+- Writes still go exclusively through `submit_referral`
+- Before any multi-role feature — admin, recruiter, manager — decide deliberately whether
+  to reintroduce RLS keyed on a session variable (`set local app.employee_id`) or to keep
+  all authorisation in the server layer. Do not drift into a half-and-half state
 
 ### `submit_referral` contract
 
-Signature: `(p_job_id, p_full_name, p_email, p_phone, p_org, p_designation, p_linkedin,
-p_relationship, p_consent_text)` → `(ref_code, reward_amount)`.
+Signature: `(p_referrer_id uuid, p_job_id uuid, p_full_name, p_email, p_phone, p_org,
+p_designation, p_linkedin, p_relationship, p_consent_text)` → `(ref_code, reward_amount)`.
+
+It is **no longer `SECURITY DEFINER`**. It runs as the caller — the application role — and
+takes the referrer's id as an argument instead of reading `auth.uid()`. Passing the wrong
+id is therefore an application bug that the database will not catch: `actions.ts` must
+always pass `employee.id` from `requireEmployee()`, never anything from the request body.
 
 In order, it:
 
-1. Rejects an unauthenticated caller and an employee with no `employees` row
-2. Rejects a closed or unknown job
-3. Rejects a missing consent notice
-4. Normalises email and phone
+1. Rejects an unknown referrer, and a closed or unknown job
+2. Rejects a missing consent notice
+3. Normalises email and phone
+4. Takes `pg_advisory_xact_lock` on the normalised email and phone, so two concurrent
+   submissions of the same candidate serialise instead of racing the duplicate check
 5. **Duplicate check** — any referral of the same normalised email *or* phone inside the
    validity window, by anyone, raises `unique_violation` with a message that never names
    the earlier referrer
-6. Creates the candidate, mints a `REF-nnnn` code, snapshots the reward amount and
+6. Creates the candidate, mints a `REF-` + 8 hex code, snapshots the reward amount and
    eligibility days, stores the consent text
 7. Appends the first `referral_stages` row
 
-Execute is granted to `authenticated` only; revoked from `public`.
+EXECUTE is revoked from `public`, `anon` and `authenticated` by migration `0003`, and
+default privileges for new functions in `public` no longer grant EXECUTE to `public`.
+
+`actions.ts` keeps a `SPEAKABLE` set of SQLSTATEs — `23505`, `42501`, `P0002`, `23514` —
+whose messages are safe to show the user. Everything else surfaces as a generic error.
 
 ---
 
@@ -297,9 +350,11 @@ else.
 
 **5. The duplicate message never names the earlier referrer.** Ever.
 
-**6. Permissions are enforced in the database, not the UI.** What a role cannot approve,
-it must also be unable to read. Test policies with pgTAP — permission bugs do not surface
-in a UI test.
+**6. Permissions are enforced below the UI, and tested.** What a role cannot approve, it
+must also be unable to read. Since the Auth.js migration that enforcement sits in the
+server layer rather than in RLS (§6), which makes it *easier* to get wrong, not harder —
+so every authorisation rule needs a test that calls the server action or query directly,
+not a UI test.
 
 **7. Filtering is navigation.** Search and filters are GET forms, so every filtered view
 has a URL and typing never re-renders mid-keystroke. *The prototype's search box accepted
@@ -320,6 +375,28 @@ succeeded in 24 hours raises an alert.
 
 Do not rediscover these.
 
+**Postgres grants EXECUTE on every new function to the pseudo-role `PUBLIC`.** Tables have
+no such default — which is why revoking table privileges from `anon` and `authenticated`
+worked while the identical statement on functions did nothing. Those roles inherit from
+`PUBLIC`, and revoking from them never touches `PUBLIC`. Revoke from `public` explicitly,
+and add `alter default privileges in schema public revoke execute on functions from
+public`.
+
+**`create or replace function` re-grants EXECUTE to `PUBLIC`.** Migration `0002` revoked
+in step 1 and then recreated `submit_referral` in step 5, silently reopening the hole it
+had just closed. Revoke *after* the last `create`, never before. Migration `0003` exists
+for no other reason.
+
+**A Supabase publishable key still reaches PostgREST after you stop using Supabase Auth.**
+Deleting the key from your app removes nothing at all. Verify the lockdown with a real
+HTTP call using that key, not by reading the application code.
+
+**Vercel's Deployment Protection toggle can silently fail to save.** Two UI attempts
+reverted with no error and no toast. `PATCH /api/v9/projects/<projectId>?teamId=<teamId>`
+with body `{"ssoProtection": null}`, from the dashboard tab so the session cookie rides
+along, worked first time. Verify with a `GET` of the same endpoint rather than by looking
+at the switch.
+
 **The device shell is Linux; the Mac is macOS arm64.** Never run `npm install` through a
 mounted-folder Linux shell — Next's SWC and Tailwind's oxide binaries install for the
 wrong platform and the build fails confusingly. Install and run natively on the Mac.
@@ -331,9 +408,9 @@ wrong platform and the build fails confusingly. Install and run natively on the 
 **Tailwind v4 cannot `@apply` your own component class.** `.btn-primary { @apply btn … }`
 fails with "Cannot apply unknown utility class". Spell the utilities out in each class.
 
-**Supabase's built-in email is capped at a few messages an hour.** Fine for one
-developer, useless for a pilot. Configure real SMTP before more than one or two people
-test.
+**Magic-link sign-in is gone.** Auth.js is configured with Google only, so nothing is
+emailed at sign-in and Supabase's SMTP cap no longer affects auth. Real SMTP is still
+needed for Phase 1 notifications.
 
 **The Supabase free plan pauses a project after a week of inactivity** and keeps no
 backups. See §11.
@@ -479,8 +556,9 @@ elapsed weeks for that team.
 
 ### Phase 0 — complete
 
-Sign in, browse roles, refer, track. Schema, RLS, the submit function, Google and magic
-link auth, consent capture, duplicate detection.
+Sign in, browse roles, refer, track. Schema, the submit function, Google sign-in through
+Auth.js, consent capture, duplicate detection. RLS was built and then removed with
+Supabase Auth — authorisation now lives in the server layer (§6).
 
 ### Phase 0.5 — finish the slice (1–2 weeks)
 
@@ -491,7 +569,7 @@ Small, and it makes Phase 0 genuinely usable.
 - **Referral detail page** with the dated journey timeline (the table exists, no UI)
 - **Policy and FAQ content** — their own funnel says understanding, not awareness, is the
   biggest drop, so this is a growth lever, not decoration
-- Delete the stale Google client secret; move Supabase to Pro; configure real SMTP
+- Delete the stale Google client secret; move Supabase to Pro
 - Accessibility pass: labels, focus management, keyboard paths, dialog semantics
 
 ### Phase 1 — pilot: refer, track, get paid (8–10 weeks)
@@ -574,7 +652,7 @@ added to the end.
 | The ATS has no usable API, or it needs a licence upgrade | Severe — the whole status pipeline depends on it | Confirm first. Fallback is a recruiter-operated stage screen inside the Hub: worse, but shippable |
 | Payroll cannot consume a structured file | High | CSV with a documented column contract; accept manual keying, with the Hub as the record |
 | Procurement stays manual | Medium | Build the admin workflow first, treat integration as optional, add an ageing alert |
-| Permission bug leaks candidate or reward data | Severe | RLS as the enforcement layer plus pgTAP policy tests in CI |
+| Permission bug leaks candidate or reward data | Severe — **raised since RLS was removed** | Every query filters explicitly by employee id; server-layer authorisation tests in CI; revisit RLS keyed on a session variable before the first multi-role feature |
 | Reward disputes over who referred first | Medium | Immutable timestamps, an explainable rule, policy visible before submit |
 | Adoption stalls | Medium | Ship policy and how-to content as P0; measure the funnel from day one |
 | Scope creep from the prototype's fifteen admin screens | Medium | The priority bands are the defence. Phase 1 ships six |
@@ -592,12 +670,24 @@ added to the end.
 
 ## 15. Immediate next actions
 
-1. Get §10 in front of HR. **D02, D04, D10, D11 and D12 are the ones that stall
+**Blocking the deployed app — Pradyumn, minutes each:**
+
+1. Paste the database password into `DATABASE_URL`, and the Google client secret (the one
+   ending `9qk0`) into `AUTH_GOOGLE_SECRET`, in `.env.local`.
+2. Add `AUTH_SECRET`, `AUTH_GOOGLE_SECRET`, `DATABASE_URL` and
+   `NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN` to Vercel as Secret-type variables, delete
+   `NEXT_PUBLIC_SITE_URL`, push the Auth.js code and redeploy. Production returns 500
+   until this is done.
+3. Delete the stale Google OAuth secret (`****g80a`) and the dead Supabase redirect URI
+   `https://qnskrjxzeuuysbviqxhd.supabase.co/auth/v1/callback`.
+
+**Then, in priority order:**
+
+4. Get §10 in front of HR. **D02, D04, D10, D11 and D12 are the ones that stall
    engineering.**
-2. Confirm which ATS, HRMS, payroll and procurement systems are in use, and who owns the
+5. Confirm which ATS, HRMS, payroll and procurement systems are in use, and who owns the
    credentials. Start this on day one — it is the critical path.
-3. Finance to confirm the tax treatment in writing (D13).
-4. Move Supabase to Pro and stand up a staging project.
-5. Delete the stale Google OAuth secret (`****g80a`).
-6. Configure real SMTP before anyone beyond one tester signs in.
-7. Build Phase 0.5 while the above is being chased — none of it is blocked by HR.
+6. Finance to confirm the tax treatment in writing (D13).
+7. Move Supabase to Pro and stand up a staging project.
+8. Configure real SMTP before Phase 1 notifications.
+9. Build Phase 0.5 while the above is being chased — none of it is blocked by HR.

@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { query } from "@/lib/db";
+import { requireEmployee } from "@/lib/employees";
 import { rupees, shortDate, initials } from "@/lib/format";
 
 type Row = {
@@ -9,21 +10,37 @@ type Row = {
   submitted_at: string;
   reward_amount_snapshot: number;
   relationship: string;
-  candidates: { full_name: string } | null;
-  jobs: { title: string; location: string } | null;
+  candidate_name: string | null;
+  job_title: string | null;
+  job_location: string | null;
 };
 
 export default async function ReferralsPage() {
-  const supabase = await createClient();
+  const employee = await requireEmployee();
 
-  const { data, error } = await supabase
-    .from("referrals")
-    .select(
-      "id, ref_code, status, submitted_at, reward_amount_snapshot, relationship, candidates(full_name), jobs(title, location)",
-    )
-    .order("submitted_at", { ascending: false });
-
-  const rows = (data ?? []) as unknown as Row[];
+  let rows: Row[] = [];
+  let error: string | null = null;
+  try {
+    // The `where r.referrer_id = $1` is the whole permission model for this page.
+    // Row-level security used to guarantee it; now this clause does, and nothing
+    // else will catch its absence. Do not remove it, and do not let a future
+    // filter make it conditional.
+    rows = await query<Row>(
+      `select r.id, r.ref_code, r.status, r.submitted_at,
+              r.reward_amount_snapshot, r.relationship,
+              c.full_name as candidate_name,
+              j.title     as job_title,
+              j.location  as job_location
+         from public.referrals r
+         join public.candidates c on c.id = r.candidate_id
+         join public.jobs       j on j.id = r.job_id
+        where r.referrer_id = $1
+        order by r.submitted_at desc`,
+      [employee.id],
+    );
+  } catch (e) {
+    error = e instanceof Error ? e.message : "Unknown error";
+  }
 
   return (
     <>
@@ -41,7 +58,7 @@ export default async function ReferralsPage() {
 
       {error && (
         <p className="card mb-5 border-[var(--color-danger)] bg-[var(--color-danger-soft)] p-4 text-[14px] text-[var(--color-danger)]">
-          Could not load your referrals: {error.message}
+          Could not load your referrals: {error}
         </p>
       )}
 
@@ -61,16 +78,16 @@ export default async function ReferralsPage() {
           {rows.map((r) => (
             <li key={r.id} className="card flex flex-wrap items-center gap-4 p-5">
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--color-brand-soft)] text-[13px] font-semibold text-[var(--color-brand)]">
-                {initials(r.candidates?.full_name ?? "?")}
+                {initials(r.candidate_name ?? "?")}
               </span>
 
               <div className="min-w-[180px] flex-1">
                 <p className="text-[15.5px] font-semibold leading-snug">
-                  {r.candidates?.full_name ?? "Candidate"}
+                  {r.candidate_name ?? "Candidate"}
                 </p>
                 <p className="text-[13px] text-[var(--color-ink-3)]">
-                  {r.jobs?.title ?? "Role"}
-                  {r.jobs?.location ? ` · ${r.jobs.location}` : ""} · {r.ref_code}
+                  {r.job_title ?? "Role"}
+                  {r.job_location ? ` · ${r.job_location}` : ""} · {r.ref_code}
                 </p>
               </div>
 

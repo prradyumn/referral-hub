@@ -1,4 +1,5 @@
-import { createClient } from "@/lib/supabase/server";
+import { query } from "@/lib/db";
+import { requireEmployee } from "@/lib/employees";
 import ReferralForm, { type JobOption } from "./ReferralForm";
 
 export default async function ReferPage({
@@ -6,17 +7,17 @@ export default async function ReferPage({
 }: {
   searchParams: Promise<{ job?: string }>;
 }) {
+  await requireEmployee();
+
   const sp = await searchParams;
-  const supabase = await createClient();
 
-  const { data } = await supabase
-    .from("jobs")
-    .select("id, title, location, department, reward_amount, eligibility_days")
-    .eq("is_open", true)
-    .order("is_priority", { ascending: false })
-    .order("title");
+  const jobs = await query<JobOption>(
+    `select id, title, location, department, reward_amount, eligibility_days
+       from public.jobs
+      where is_open
+      order by is_priority desc, title`,
+  );
 
-  const jobs: JobOption[] = data ?? [];
   const initialJobId = jobs.some((j) => j.id === sp.job) ? sp.job : undefined;
 
   return <ReferralForm jobs={jobs} initialJobId={initialJobId} />;
