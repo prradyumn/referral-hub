@@ -1,0 +1,75 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #171b24;
+  --color-ink-2: #4b5261;
+  --color-ink-3: #767e8e;
+  --color-line: #e2e5ea;
+  --color-surface: #ffffff;
+  --color-ground: #f6f7f9;
+  --color-brand: #3b2f9e;
+  --color-brand-soft: #eceafa;
+  --color-gold: #a8760f;
+  --color-gold-soft: #fdf3dd;
+  --color-danger: #a3271f;
+  --color-danger-soft: #fae9e7;
+  --color-good: #2f6b4f;
+  --color-good-soft: #e4f0ea;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+html,
+body {
+  background: var(--color-ground);
+  color: var(--color-ink);
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+@layer components {
+  .card {
+    @apply rounded-lg border border-[var(--color-line)] bg-[var(--color-surface)];
+  }
+
+  .label {
+    @apply mb-1.5 block text-[13px] font-medium text-[var(--color-ink-2)];
+  }
+
+  .field {
+    @apply w-full rounded-md border border-[var(--color-line)] bg-white px-3 py-2.5 text-[15px]
+           text-[var(--color-ink)] outline-none transition
+           placeholder:text-[var(--color-ink-3)]
+           focus:border-[var(--color-brand)] focus:ring-2 focus:ring-[var(--color-brand-soft)];
+  }
+
+  .field-error {
+    @apply border-[var(--color-danger)] focus:border-[var(--color-danger)] focus:ring-[var(--color-danger-soft)];
+  }
+
+  .hint {
+    @apply mt-1.5 text-[12.5px] text-[var(--color-danger)];
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-4 py-2.5 text-[14.5px]
+           font-medium transition disabled:cursor-not-allowed disabled:opacity-55
+           bg-[var(--color-brand)] text-white hover:bg-[#33288a]
+           focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand)];
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-4 py-2.5 text-[14.5px]
+           font-medium transition disabled:cursor-not-allowed disabled:opacity-55
+           border border-[var(--color-line)] bg-white text-[var(--color-ink-2)]
+           hover:border-[var(--color-ink-3)]
+           focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-brand)];
+  }
+
+  .pill {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-[11.5px] font-medium;
+  }
+}
