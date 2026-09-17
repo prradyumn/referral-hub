@@ -1,48 +1,55 @@
 import Link from "next/link";
 import { signOut } from "@/auth";
-import { requireEmployee } from "@/lib/employees";
+import { requireSignedInUser } from "@/lib/employees";
 import { initials } from "@/lib/format";
+import WelcomeDialog from "@/components/WelcomeDialog";
+import Logo from "@/components/Logo";
 
 const NAV = [
+  { href: "/home", label: "Home" },
   { href: "/roles", label: "Open roles" },
   { href: "/referrals", label: "My referrals" },
+  { href: "/rewards", label: "My rewards" },
+  { href: "/leaderboard", label: "Leaderboard" },
+  { href: "/how-to-refer", label: "How to refer" },
 ];
 
 export default async function AppLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const employee = await requireEmployee();
-  const name = employee.full_name || employee.email.split("@")[0] || "there";
+  // Session only — no database. The shell renders whether or not Postgres is up.
+  const user = await requireSignedInUser();
 
   return (
     <div className="min-h-screen">
-      <header className="border-b border-[var(--color-line)] bg-white">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-6 gap-y-3 px-5 py-3.5">
-          <Link href="/roles" className="flex items-center gap-2.5">
-            <span className="flex h-8 w-8 items-center justify-center rounded-md bg-[var(--color-brand)] text-[13px] font-bold text-white">
-              cg
-            </span>
+      <header className="sticky top-0 z-30 border-b border-[var(--color-line)] bg-white/95 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-5 gap-y-3 px-5 py-3">
+          <Link href="/home" className="flex items-center gap-2.5">
+            <Logo className="h-7 w-7" />
             <span className="text-[15px] font-semibold tracking-tight">Referral Hub</span>
           </Link>
 
-          <nav className="flex items-center gap-1">
+          <nav className="-mx-1 flex flex-1 items-center gap-0.5 overflow-x-auto px-1">
             {NAV.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
-                className="rounded-md px-3 py-1.5 text-[14px] text-[var(--color-ink-2)] transition hover:bg-[var(--color-brand-soft)] hover:text-[var(--color-brand)]"
+                className="whitespace-nowrap rounded-md px-2.5 py-1.5 text-[13.5px] text-[var(--color-ink-2)] transition hover:bg-[var(--color-brand-soft)] hover:text-[var(--color-brand)]"
               >
                 {item.label}
               </Link>
             ))}
           </nav>
 
-          <div className="ml-auto flex items-center gap-3">
+          <div className="flex items-center gap-3">
+            <Link href="/refer" className="btn-primary hidden !py-2 text-[13.5px] sm:inline-flex">
+              Refer someone
+            </Link>
             <span
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--color-brand-soft)] text-[12px] font-semibold text-[var(--color-brand)]"
-              title={employee.email}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--color-brand-soft)] text-[12px] font-semibold text-[var(--color-brand)]"
+              title={user.email}
             >
-              {initials(name)}
+              {initials(user.name)}
             </span>
             <form
               action={async () => {
@@ -52,7 +59,7 @@ export default async function AppLayout({
             >
               <button
                 type="submit"
-                className="text-[13px] text-[var(--color-ink-3)] transition hover:text-[var(--color-ink)]"
+                className="text-[13px] whitespace-nowrap text-[var(--color-ink-3)] transition hover:text-[var(--color-ink)]"
               >
                 Sign out
               </button>
@@ -61,7 +68,9 @@ export default async function AppLayout({
         </div>
       </header>
 
-      <main className="mx-auto max-w-5xl px-5 py-8">{children}</main>
+      <main className="mx-auto max-w-6xl px-5 py-8">{children}</main>
+
+      <WelcomeDialog />
     </div>
   );
 }

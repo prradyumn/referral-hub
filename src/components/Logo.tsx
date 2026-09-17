@@ -1,0 +1,10 @@
+/** The ConveGenius mark, inlined so it needs no image request or optimiser. */
+export default function Logo({ className = "h-7 w-7" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 64 64" className={className} role="img" aria-label="ConveGenius">
+      <g fill="#454b9e"><circle cx="30.93" cy="23.07" r="3.5"/><circle cx="23.62" cy="18.10" r="3.5"/><circle cx="14.78" cy="18.29" r="3.5"/><circle cx="7.70" cy="23.58" r="3.5"/><circle cx="5.00" cy="32.00" r="3.5"/><circle cx="7.70" cy="40.42" r="3.5"/><circle cx="14.78" cy="45.71" r="3.5"/><circle cx="23.62" cy="45.90" r="3.5"/><circle cx="30.93" cy="40.93" r="3.5"/></g>
+      <path d="M34 32 H62 A20 20 0 0 0 42 12 H34 Z" fill="#8ed3cb" />
+      <path d="M34 32 H62 A20 20 0 0 1 42 52 H34 Z" fill="#454b9e" />
+    </svg>
+  );
+}

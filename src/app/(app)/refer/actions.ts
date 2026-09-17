@@ -55,7 +55,12 @@ export async function submitReferral(
   // would let anyone file a referral in someone else's name.
   const employee = await currentEmployee();
   if (!employee) {
-    return { status: "error", formError: "You must be signed in to refer someone." };
+    return {
+      status: "error",
+      formError:
+        "Referrals cannot be saved yet — the database is not connected. Sign-in and " +
+        "browsing work; ask whoever set this up to configure DATABASE_URL.",
+    };
   }
 
   const v = parsed.data;

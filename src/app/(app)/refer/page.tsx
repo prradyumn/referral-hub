@@ -1,5 +1,5 @@
 import { query } from "@/lib/db";
-import { requireEmployee } from "@/lib/employees";
+import { requireSignedInUser } from "@/lib/employees";
 import ReferralForm, { type JobOption } from "./ReferralForm";
 
 export default async function ReferPage({
@@ -7,7 +7,7 @@ export default async function ReferPage({
 }: {
   searchParams: Promise<{ job?: string }>;
 }) {
-  await requireEmployee();
+  await requireSignedInUser();
 
   const sp = await searchParams;
 

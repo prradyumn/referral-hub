@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { query } from "@/lib/db";
-import { requireEmployee } from "@/lib/employees";
+import { requireSignedInUser } from "@/lib/employees";
 import { rupees } from "@/lib/format";
+import { Card, PageHead } from "@/components/Chrome";
 
 type Job = {
   id: string;
@@ -22,9 +23,7 @@ export default async function RolesPage({
 }: {
   searchParams: Promise<Search>;
 }) {
-  // Every page under (app) must establish the caller itself now that there is
-  // no row-level security standing behind the query.
-  await requireEmployee();
+  await requireSignedInUser();
 
   const sp = await searchParams;
 
@@ -38,8 +37,9 @@ export default async function RolesPage({
         where is_open
         order by is_priority desc, posted_on desc`,
     );
-  } catch (e) {
-    error = e instanceof Error ? e.message : "Unknown error";
+  } catch {
+    // No database yet. Show the empty state rather than failing the page.
+    error = "not-connected";
   }
 
   const departments = [...new Set(all.map((j) => j.department))].sort();
@@ -59,17 +59,25 @@ export default async function RolesPage({
 
   return (
     <>
-      <div className="mb-6">
-        <h1 className="text-[26px] font-semibold tracking-tight">Open roles</h1>
-        <p className="mt-1 text-[15px] text-[var(--color-ink-2)]">
-          Find someone you would want to work with.
-        </p>
-      </div>
+      <PageHead title="Open roles" lede="Find someone you would want to work with." />
 
       {error && (
-        <p className="card mb-5 border-[var(--color-danger)] bg-[var(--color-danger-soft)] p-4 text-[14px] text-[var(--color-danger)]">
-          Could not load roles: {error}
-        </p>
+        <Card className="mb-6 border-dashed">
+          <p className="text-[14px] leading-relaxed text-[var(--color-ink-2)]">
+            <strong className="font-semibold text-[var(--color-ink)]">
+              No database connected.
+            </strong>{" "}
+            Sign-in works, but open roles come from Postgres. Set{" "}
+            <code className="rounded bg-[var(--color-ground)] px-1.5 py-0.5 text-[13px]">
+              DATABASE_URL
+            </code>{" "}
+            and apply{" "}
+            <code className="rounded bg-[var(--color-ground)] px-1.5 py-0.5 text-[13px]">
+              db/0001_schema.sql
+            </code>
+            .
+          </p>
+        </Card>
       )}
 
       {/* A GET form, so filtering is a navigation. Typing never re-renders

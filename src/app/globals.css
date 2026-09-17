@@ -15,6 +15,9 @@
   --color-danger-soft: #fae9e7;
   --color-good: #2f6b4f;
   --color-good-soft: #e4f0ea;
+  /* From the ConveGenius mark: indigo ring, mint disc. */
+  --color-mint: #2f9d90;
+  --color-mint-soft: #e2f4f1;
 
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
 }
@@ -71,5 +74,22 @@ body {
 
   .pill {
     @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-[11.5px] font-medium;
+  }
+
+  /* Marks anything on screen that is illustrative rather than live data.
+     The prototype's habit of showing invented numbers as real is the single
+     behaviour this codebase most wants to avoid. */
+  .pill-preview {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-dashed
+           border-[var(--color-ink-3)] px-2.5 py-0.5 text-[11px] font-medium
+           text-[var(--color-ink-3)];
+  }
+
+  .stat {
+    @apply text-[28px] font-semibold leading-none tracking-tight;
+  }
+
+  .stat-label {
+    @apply mt-1.5 block text-[12.5px] text-[var(--color-ink-3)];
   }
 }

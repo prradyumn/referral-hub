@@ -10,37 +10,49 @@ export type Employee = {
   location: string | null;
 };
 
+export type SignedInUser = { email: string; name: string };
+
 /**
- * The signed-in employee, created on first sign-in.
+ * Who is signed in, from the session cookie alone.
  *
- * Phase 0 did this in a trigger on auth.users. With authentication in the
- * application there is no such insert to hang a trigger on, so the row is
- * upserted here on first use. The domain rule is still enforced in the database
- * as well, by the employees_domain_check trigger in 0002 — a bug here cannot
- * create an out-of-domain employee.
- *
- * Node runtime only: it touches pg. Never call it from the proxy.
+ * Deliberately touches no database. Signing in and seeing the app must not
+ * depend on Postgres being reachable — only the screens that show real data do.
  */
-export async function currentEmployee(): Promise<Employee | null> {
+export async function signedInUser(): Promise<SignedInUser | null> {
   const session = await auth();
   const email = session?.user?.email?.trim().toLowerCase();
   if (!email) return null;
-
-  const fullName = session?.user?.name ?? "";
-
-  return queryOne<Employee>(
-    `insert into public.employees (email, full_name)
-     values ($1, nullif($2, ''))
-     on conflict (email) do update
-       set full_name = coalesce(public.employees.full_name, excluded.full_name)
-     returning id, email, full_name, department, location`,
-    [email, fullName],
-  );
+  return { email, name: session?.user?.name || email.split("@")[0] };
 }
 
-/** As above, but sends anyone not signed in to the login page. */
-export async function requireEmployee(): Promise<Employee> {
-  const employee = await currentEmployee();
-  if (!employee) redirect("/login");
-  return employee;
+export async function requireSignedInUser(): Promise<SignedInUser> {
+  const user = await signedInUser();
+  if (!user) redirect("/login");
+  return user;
+}
+
+/**
+ * The employee row, created on first use.
+ *
+ * Returns null when the database is unreachable, so a caller can fall back to a
+ * read-only view rather than failing the whole page. Anything that writes must
+ * treat null as "cannot proceed".
+ */
+export async function currentEmployee(): Promise<Employee | null> {
+  const user = await signedInUser();
+  if (!user) return null;
+
+  try {
+    return await queryOne<Employee>(
+      `insert into employees (email, full_name)
+       values ($1, nullif($2, ''))
+       on conflict (email) do update
+         set full_name = coalesce(employees.full_name, excluded.full_name)
+       returning id, email, full_name, department, location`,
+      [user.email, user.name],
+    );
+  } catch {
+    // No database configured yet, or it is down. The caller decides.
+    return null;
+  }
 }
