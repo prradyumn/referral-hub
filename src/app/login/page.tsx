@@ -1,4 +1,5 @@
 import { signIn, ALLOWED_EMAIL_DOMAIN } from "@/auth";
+import GoogleSignInButton from "@/components/GoogleSignInButton";
 
 const DOMAIN = ALLOWED_EMAIL_DOMAIN;
 
@@ -61,16 +62,29 @@ export default async function LoginPage({
             Use your ConveGenius work account.
           </p>
 
-          <form
-            action={async () => {
+          {/* Opens Google in a popup so this page is never navigated away
+              from. If the popup is blocked it falls back to the full-page
+              redirect, which is the flow that has always worked. */}
+          <GoogleSignInButton
+            next={next}
+            fallbackAction={async () => {
               "use server";
               await signIn("google", { redirectTo: next });
             }}
-          >
-            <button type="submit" className="btn-primary w-full">
-              Continue with Google
-            </button>
-          </form>
+          />
+
+          <noscript>
+            <form
+              action={async () => {
+                "use server";
+                await signIn("google", { redirectTo: next });
+              }}
+            >
+              <button type="submit" className="btn-ghost mt-3 w-full">
+                Continue with Google
+              </button>
+            </form>
+          </noscript>
         </div>
 
         <p className="mt-5 text-center text-[12.5px] text-[var(--color-ink-3)]">

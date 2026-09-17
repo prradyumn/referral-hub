@@ -5,7 +5,9 @@ import { auth } from "@/auth";
 // session in a signed cookie, so there is no session to refresh here — this
 // only gates routes. The employees row is handled in the app, not here, because
 // this may run on the edge where pg is unavailable.
-const PUBLIC_PREFIXES = ["/login", "/api/auth"];
+// /auth/popup and /auth/complete carry no data; they only run the popup
+// handshake, and /auth/popup is loaded before there is a session.
+const PUBLIC_PREFIXES = ["/login", "/api/auth", "/auth/popup", "/auth/complete"];
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
