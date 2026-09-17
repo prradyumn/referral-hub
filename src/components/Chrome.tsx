@@ -61,13 +61,15 @@ export function StatGroup({
   heading,
   accent,
   items,
+  className = "",
 }: {
   heading: string;
   accent: string;
   items: { value: string; label: string }[];
+  className?: string;
 }) {
   return (
-    <Card className="flex flex-col">
+    <Card className={`flex flex-col ${className}`}>
       <p className="mb-4 text-[13px] font-medium text-[var(--color-ink-2)]">{heading}</p>
       <div className="flex flex-wrap gap-x-8 gap-y-4">
         {items.map((it, i) => (

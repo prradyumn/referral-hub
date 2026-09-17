@@ -172,12 +172,12 @@ export default async function RolesPage({
               </p>
 
               {job.summary && (
-                <p className="mt-3 line-clamp-3 text-[14px] leading-relaxed text-[var(--color-ink-2)]">
+                <p className="mt-3 mb-4 line-clamp-3 text-[14px] leading-relaxed text-[var(--color-ink-2)]">
                   {job.summary}
                 </p>
               )}
 
-              <div className="mt-4 flex items-center justify-between rounded-md bg-[var(--color-gold-soft)] px-3 py-2">
+              <div className="mt-auto flex items-center justify-between rounded-md bg-[var(--color-gold-soft)] px-3 py-2 pt-2">
                 <span className="text-[13px] text-[var(--color-ink-2)]">Referral reward</span>
                 <span className="text-[15px] font-semibold text-[var(--color-gold)]">
                   {rupees(job.reward_amount)}

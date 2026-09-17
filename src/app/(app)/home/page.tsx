@@ -15,11 +15,6 @@ export default async function HomePage() {
       <PageHead
         title={`Hello, ${firstName[0].toUpperCase() + firstName.slice(1)}`}
         lede="Where your referrals have reached, and what they are worth."
-        action={
-          <Link href="/roles" className="btn-primary">
-            Refer someone
-          </Link>
-        }
       />
 
       {/* Referrals · Cash · Gifts — the three groups HR asked for */}
@@ -30,7 +25,8 @@ export default async function HomePage() {
         <PreviewTag />
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-3">
+      {/* Cash takes two columns: three rupee figures wrap at a third of the row. */}
+      <div className="grid gap-3 lg:grid-cols-4">
         <StatGroup
           heading="Referrals"
           accent="var(--color-brand)"
@@ -42,6 +38,7 @@ export default async function HomePage() {
         />
         <StatGroup
           heading="Cash"
+          className="lg:col-span-2"
           accent="var(--color-gold)"
           items={[
             { value: rupees(homeStats.cash.accumulated), label: "Accumulated" },

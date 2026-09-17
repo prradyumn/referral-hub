@@ -16,11 +16,27 @@ type Row = {
   job_location: string | null;
 };
 
-/** The dated journey the CSV asks for. Phase 1 fills it from referral_stages. */
-function Journey() {
+/**
+ * The dated journey the CSV asks for. Phase 1 fills it from referral_stages.
+ *
+ * The first stage uses the referral's real submitted_at — the rest are
+ * illustrative offsets from it. Showing a fixed date for every row made a card
+ * contradict its own "Referred on" line.
+ */
+function Journey({ submittedAt }: { submittedAt: string }) {
+  const start = new Date(submittedAt);
+  const offsetDays = [0, 4, 12];
+
+  const stages = referralJourney.map((s, i) => {
+    if (s.state === "upcoming") return { ...s, on: null };
+    const d = new Date(start);
+    d.setDate(d.getDate() + (offsetDays[i] ?? 0));
+    return { ...s, on: d.toISOString() };
+  });
+
   return (
     <ol className="mt-4 flex flex-wrap gap-x-1 gap-y-3 border-t border-[var(--color-line)] pt-4">
-      {referralJourney.map((s, i) => (
+      {stages.map((s, i) => (
         <li key={s.stage} className="flex min-w-[128px] flex-1 flex-col gap-1.5">
           <span className="flex items-center gap-1" aria-hidden="true">
             <span
@@ -32,7 +48,7 @@ function Journey() {
                     : "border border-[var(--color-line)] bg-white"
               }`}
             />
-            {i < referralJourney.length - 1 && (
+            {i < stages.length - 1 && (
               <span
                 className={`h-px flex-1 ${
                   s.state === "done" ? "bg-[var(--color-good)]" : "bg-[var(--color-line)]"
@@ -92,11 +108,6 @@ export default async function ReferralsPage() {
       <PageHead
         title="My referrals"
         lede="Everyone you have referred, and where they have reached."
-        action={
-          <Link href="/roles" className="btn-primary">
-            Refer someone
-          </Link>
-        }
       />
 
       {dbDown && (
@@ -161,7 +172,7 @@ export default async function ReferralsPage() {
               <div className="mt-2 flex justify-end">
                 <PreviewTag label="Stages are illustrative" />
               </div>
-              <Journey />
+              <Journey submittedAt={r.submitted_at} />
             </li>
           ))}
         </ul>
