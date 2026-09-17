@@ -5,7 +5,6 @@ import { Pool } from "pg";
 // a connection pooler (Neon's pooled host, PgBouncer), point DATABASE_URL at it
 // rather than the direct connection.
 declare global {
-  // eslint-disable-next-line no-var
   var __referralHubPool: Pool | undefined;
 }
 

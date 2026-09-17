@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { benefits } from "@/lib/showcase";
 
@@ -36,9 +36,11 @@ function BenefitArt({ index }: { index: number }) {
 }
 
 export default function WelcomeDialog() {
-  const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDialogElement>(null);
 
+  // The <dialog> holds its own open state, so this drives the element directly
+  // rather than mirroring it in React state — which would mean calling setState
+  // inside an effect and re-rendering for nothing.
   useEffect(() => {
     let seen = "1";
     try {
@@ -47,15 +49,8 @@ export default function WelcomeDialog() {
       // Private window, or storage blocked. Treat as seen and stay out of the way.
       seen = "1";
     }
-    if (!seen) setOpen(true);
+    if (!seen) ref.current?.showModal();
   }, []);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    if (open && !el.open) el.showModal();
-    if (!open && el.open) el.close();
-  }, [open]);
 
   function dismiss() {
     try {
@@ -63,7 +58,7 @@ export default function WelcomeDialog() {
     } catch {
       // Nothing to do — it simply shows again next time.
     }
-    setOpen(false);
+    ref.current?.close();
   }
 
   return (

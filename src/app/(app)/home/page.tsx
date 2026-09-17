@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { requireSignedInUser } from "@/lib/employees";
 import { rupees, shortDate } from "@/lib/format";
 import { homeStats, latestUpdate, leaderboard, nextMilestone } from "@/lib/showcase";

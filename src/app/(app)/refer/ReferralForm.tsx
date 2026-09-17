@@ -37,6 +37,8 @@ export default function ReferralForm({
   const [consent, setConsent] = useState(false);
   const [step, setStep] = useState<1 | 2>(1);
   const [clientErrors, setClientErrors] = useState<Record<string, string>>({});
+  // Server-reported fields the user has since edited.
+  const [dismissed, setDismissed] = useState<Record<string, true>>({});
 
   const [state, formAction, pending] = useActionState<SubmitState, FormData>(
     submitReferral,
@@ -44,10 +46,23 @@ export default function ReferralForm({
   );
 
   const job = useMemo(() => jobs.find((j) => j.id === jobId), [jobs, jobId]);
-  const errors = { ...clientErrors, ...(state.fieldErrors ?? {}) };
+  // All derived during render: no effect, and therefore no setState inside one.
+  //
+  // The review step renders no fields, so a server-side rejection used to have
+  // nowhere to appear — the button simply returned to "Submit referral" with
+  // nothing said. A server error now forces step 1, where the message sits next
+  // to the field it concerns, and editing that field dismisses it.
+  const serverErrors =
+    state.status === "error" && state.fieldErrors ? state.fieldErrors : {};
+  const liveServerErrors = Object.fromEntries(
+    Object.entries(serverErrors).filter(([field]) => !dismissed[field]),
+  );
+  const errors: Record<string, string> = { ...liveServerErrors, ...clientErrors };
+  const shownStep = Object.keys(liveServerErrors).length > 0 ? 1 : step;
 
   function set(field: keyof typeof EMPTY, value: string) {
     setValues((v) => ({ ...v, [field]: value }));
+    if (serverErrors[field]) setDismissed((d) => ({ ...d, [field]: true }));
     if (clientErrors[field]) {
       setClientErrors((e) => {
         const next = { ...e };
@@ -72,6 +87,7 @@ export default function ReferralForm({
       return;
     }
     setClientErrors({});
+    setDismissed({});
     setStep(2);
   }
 
@@ -107,7 +123,7 @@ export default function ReferralForm({
       <div className="mb-6">
         <h1 className="text-[26px] font-semibold tracking-tight">Refer someone</h1>
         <p className="mt-1 text-[15px] text-[var(--color-ink-2)]">
-          {step === 1 ? "Takes about two minutes." : "Check before you submit."}
+          {shownStep === 1 ? "Takes about two minutes." : "Check before you submit."}
         </p>
       </div>
 
@@ -123,13 +139,15 @@ export default function ReferralForm({
       <form action={formAction} className="card p-6">
         <input type="hidden" name="jobId" value={jobId} />
         <input type="hidden" name="jobTitle" value={job?.title ?? ""} />
-        <input type="hidden" name="consent" value={consent ? "on" : ""} />
-        {step === 2 &&
+        {/* Only present when ticked: an empty string would satisfy `?? false`
+            in the action and produce zod's generic message. */}
+        {consent && <input type="hidden" name="consent" value="on" />}
+        {shownStep === 2 &&
           (Object.keys(EMPTY) as Array<keyof typeof EMPTY>).map((k) => (
             <input key={k} type="hidden" name={k} value={values[k]} />
           ))}
 
-        {step === 1 ? (
+        {shownStep === 1 ? (
           <>
             <div className="mb-5">
               <label htmlFor="jobId-select" className="label">
