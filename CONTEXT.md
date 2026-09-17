@@ -6,7 +6,7 @@ are, what is decided, what is not, and what every remaining phase contains.
 
 | | |
 | --- | --- |
-| Last updated | 16 September 2026 |
+| Last updated | 17 September 2026 |
 | Phase | **0 running end to end on Neon, verified 16 Sep 2026.** Phase 1 not started |
 | Auth | **Auth.js (NextAuth v5) + Google, JWT sessions.** Supabase Auth was removed on 16 Sep 2026 |
 | Local path | `/Users/pradyumnawasthi/Downloads/referral-hub` |
@@ -72,15 +72,21 @@ easier with more infrastructure.
 
 ### Working end to end
 
-- Sign-in by **Google**, work accounts only, through Auth.js. The `hd` hint narrows the
-  Google account chooser, the `signIn` callback rejects any other domain, and a database
-  trigger rejects it a third time
+- Sign-in by **Google** in a **popup**, work accounts only, through Auth.js. The `hd` hint
+  narrows the Google account chooser, the `signIn` callback rejects any other domain, and a
+  database trigger rejects it a third time. The popup means the app is never navigated away
+  from; if it is blocked the button falls back to the full-page redirect
 - Employee record created or matched on first sign-in by `currentEmployee()`, upserting on
   email
 - Ten seeded open roles, browsable with search and filters
 - Two-step referral submission with real validation and candidate consent capture
 - Duplicate detection at submit, which never reveals who referred first
-- "My referrals" list, scoped to the signed-in employee in the query itself
+- "My referrals" list, scoped to the signed-in employee in the query itself, with the
+  dated candidate journey
+- **Home, My rewards, Leaderboard and How to refer** — the screens from the HR
+  requirements sheet, rendered from `src/lib/showcase.ts`. Every figure on them is
+  invented and marked "Sample data"; see §3 *Not built yet*
+- A first-visit **welcome dialog** showing the milestone gift tiers
 
 ### Verified, not assumed
 
@@ -101,11 +107,35 @@ Also verified: 6 tables, 10/10 roles seeded, and the normalisers behaving
 (`09876543210` → `+919876543210`; `  Priya.Sharma+jobs@Example.COM ` →
 `priya.sharma@example.com`).
 
+**The referral flow was run end to end on 17 September 2026** — until then it never had
+been, and `submit_referral` had not executed once since `0002` rewrote it. Two scripts do
+this, both of which delete the rows they create:
+
+| Script | Proves |
+| --- | --- |
+| `scripts/e2e-refer.mjs` | A referral submitted through the real form writes `REF-` plus 8 hex, snapshots reward and eligibility days, stores the phone as E.164 and the consent text, appends one `referral_stages` row, and sets six-month validity. Re-submitting the same candidate is refused with a message that does not name the earlier referrer |
+| `scripts/e2e-scoping.mjs` | Two employees with one referral each: neither sees the other's candidate name or ref code |
+
+The second matters more than it looks. Row-level security used to guarantee that scoping;
+since `0002` the only thing standing between one employee and another's candidates is
+`where r.referrer_id = $1` in `src/app/(app)/referrals/page.tsx`. Nothing else will catch
+that clause being dropped, so **run this script whenever that file changes**.
+
+Three real sign-ins have created `employees` rows, all `@convegenius.ai`, names populated
+from Google — so the domain rule is holding in practice, not just in theory.
+
 ### Not built yet
 
-No résumé upload (the field is absent, not broken). No admin portal. No rewards, gifts,
-milestones, leaderboard or notifications. No ATS or HRMS connection — roles are seeded and
-referral status stays at `submitted` forever.
+No résumé upload (the field is absent, not broken). No admin portal. No ATS or HRMS
+connection — roles are seeded and referral status stays at `submitted` forever.
+
+**Rewards, gifts, milestones and the leaderboard have screens but no features.** They read
+from `src/lib/showcase.ts` and every one carries a visible "Sample data" marker, with the
+phase it belongs to stated on the page. This is deliberate: the layouts are being agreed
+with HR before the engines behind them are built. It is also the one thing most likely to
+be misread by someone new — the numbers are invented, and §7 convention 1 is why they are
+labelled rather than quietly plausible. When you wire a screen to live data, delete its
+entry from that file rather than leaving a silent fallback.
 
 ---
 
@@ -151,7 +181,8 @@ Nothing points at it. Delete it once the Neon cutover has been used for a week.
 | Consent screen | **Internal** — only convegenius.ai accounts, no Google verification needed |
 | App name shown to users | ConveGenius Referral Hub |
 | Support + contact email | pradyumn@convegenius.ai |
-| OAuth client | `Referral Hub (Supabase)`, type Web application — the name is now historical |
+| OAuth client | `Referral Hub (Supabase)`, type Web application — the name is now historical, rename it |
+| Name employees actually see | **"CG HR Portal"** on the Google consent screen. Not the "ConveGenius Referral Hub" recorded here before — worth making deliberate, it is what people read when deciding whether to trust the sign-in |
 | Client ID | `515322592770-1111n28bcp5d0h3c6k13d91ffhm6ihn9.apps.googleusercontent.com` |
 | Redirect URI — local | `http://localhost:3000/api/auth/callback/google` |
 | Redirect URI — production | `https://referral-hub-prradyumns-projects.vercel.app/api/auth/callback/google` |
@@ -196,13 +227,19 @@ backup.
 | Team | `prradyumns-projects` · `team_9BT0BbrkpDS9X5pv1EsmzpHd` (Hobby) |
 | Production URL | `https://referral-hub-prradyumns-projects.vercel.app` |
 | Deployment Protection | **Off** — disabled 16 Sep 2026, see §8 for how |
-| Env vars set | `ALLOWED_EMAIL_DOMAIN`, `AUTH_GOOGLE_ID` |
-| Env vars still owed | `AUTH_SECRET`, `AUTH_GOOGLE_SECRET`, `DATABASE_URL`, `NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN` |
+| Env vars set | `AUTH_SECRET`, `AUTH_URL`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `ALLOWED_EMAIL_DOMAIN`, plus the `DATABASE_URL` / `POSTGRES_*` / `PGHOST*` set Neon injected |
 | Removed | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` |
+| Deleted 17 Sep | `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN` — nothing read them |
 
-`NEXT_PUBLIC_SITE_URL` is still set and no longer read by anything — delete it.
-**Production returns 500** until the four owed variables are added and the project is
-redeployed.
+**Production works.** Sign-in, roles, refer and My referrals all run against Neon.
+
+The code reads exactly four variables — `DATABASE_URL`, `AUTH_GOOGLE_ID`,
+`AUTH_GOOGLE_SECRET`, `ALLOWED_EMAIL_DOMAIN` — plus `AUTH_SECRET` and `AUTH_URL`, which
+Auth.js reads itself. `grep -rhoE 'process\.env\.[A-Z_0-9]+' src/` is the whole list;
+everything else in the dashboard is either Neon's or dead.
+
+`AUTH_URL` is set to the production URL on purpose. Vercel serves the same deployment on
+several hostnames and OAuth needs an exact redirect-URI match — see §8.
 
 ---
 
@@ -223,27 +260,45 @@ referral-hub/
 │   ├── 0001_schema.sql               ← the whole schema, plain PostgreSQL 14+
 │   └── 0002_seed.sql                 ← ten open roles
 ├── scripts/
-│   └── apply-schema.mjs              ← npm run db:apply — applies db/*.sql in order
+│   ├── apply-schema.mjs              ← npm run db:apply — applies db/*.sql in order
+│   ├── e2e-refer.mjs                 ← submits a referral, checks the rows, cleans up
+│   ├── e2e-scoping.mjs               ← proves My referrals is scoped (run on any change
+│   │                                   to referrals/page.tsx)
+│   └── shoot.mjs                     ← screenshots every screen, signed in, no Google
+├── eslint.config.mjs                 ← flat config; `next lint` no longer exists
 └── src/
     ├── auth.ts                       ← Auth.js config: Google, hd hint, domain callback
     ├── proxy.ts                      ← route gating (Next 16's name for middleware.ts)
     ├── middleware.ts                 ← DOES NOT EXIST; Next 16 renamed it to proxy.ts
+    ├── components/
+    │   ├── GoogleSignInButton.tsx    ← opens the sign-in popup, falls back to redirect
+    │   ├── WelcomeDialog.tsx         ← first-visit gift tiers
+    │   ├── Chrome.tsx                ← PageHead, PreviewTag, StatGroup, ShowcaseNotice
+    │   └── Logo.tsx                  ← the mark, inlined (next/image rejects SVG)
     ├── lib/
     │   ├── db.ts                     ← lazy pg.Pool on the pooler, Node runtime only
-    │   ├── employees.ts              ← currentEmployee(), requireEmployee()
+    │   ├── employees.ts              ← signedInUser() (no DB) and currentEmployee() (DB)
+    │   ├── showcase.ts               ← invented data for the unbuilt screens
     │   ├── validation.ts             ← Zod schema, CONSENT_NOTICE, phone formatting
     │   └── format.ts                 ← rupees(), shortDate(), initials()
     └── app/
         ├── layout.tsx  globals.css  page.tsx
+        ├── icon.svg                  ← favicon (Next serves app/icon.svg automatically)
         ├── login/page.tsx            ← Google button, domain hint, error display
         ├── api/auth/[...nextauth]/route.ts   ← Auth.js handlers
+        ├── auth/popup/page.tsx       ← starts OAuth inside the popup
+        ├── auth/complete/page.tsx    ← messages the opener, closes itself
         └── (app)/
-            ├── layout.tsx            ← signed-in shell, requireEmployee()
+            ├── layout.tsx            ← signed-in shell, session only — no database
+            ├── home/page.tsx         ← dashboard: referrals, cash, gifts   (showcase)
+            ├── rewards/page.tsx      ← reward and milestone tracking       (showcase)
+            ├── leaderboard/page.tsx  ← top 3, period filters               (showcase)
+            ├── how-to-refer/page.tsx ← steps, video slot, policy, flyer    (showcase)
             ├── roles/page.tsx        ← server component, GET-form filters
             ├── refer/page.tsx        ← loads jobs, renders the form
             ├── refer/ReferralForm.tsx← two-step client form
             ├── refer/actions.ts      ← server action → submit_referral
-            └── referrals/page.tsx    ← own referrals only
+            └── referrals/page.tsx    ← own referrals only + journey
 ```
 
 ### Commands
@@ -253,7 +308,19 @@ npm install
 npm run dev         # http://localhost:3000
 npm run build
 npm run typecheck   # tsc --noEmit
+npm run lint        # eslint .  — NOT `next lint`, removed in Next 16
 ```
+
+With the dev server running:
+
+```bash
+node --env-file=.env.local scripts/e2e-refer.mjs     # writes and deletes rows
+node --env-file=.env.local scripts/e2e-scoping.mjs   # writes and deletes rows
+node --env-file=.env.local scripts/shoot.mjs         # screenshots into .screenshots/
+```
+
+Both e2e scripts write to whatever `DATABASE_URL` points at. Do not run them against
+production once there is real data in there.
 
 ---
 
@@ -457,6 +524,41 @@ silently does nothing and the toggle reverts — which reads as `provider is not
 **Google says config changes can take five minutes to a few hours to propagate.** On a
 first-attempt `redirect_uri_mismatch` or `invalid_client`, wait before changing anything.
 
+**Vercel serves one deployment on several hostnames, and OAuth matches them exactly.**
+`referral-hub-prradyumns-projects.vercel.app` (production) and
+`referral-hub-git-main-prradyumns-projects.vercel.app` (branch alias) are the same build,
+but each advertises *its own* host as the OAuth callback. Only the first is registered with
+Google, so the second failed with `redirect_uri_mismatch`. Registering every
+auto-generated alias is a treadmill; setting `AUTH_URL` to the production origin makes all
+of them use one canonical callback. `curl -s <host>/api/auth/providers` prints the callback
+each host will use — that is the fastest way to see the problem.
+
+**Auth.js needs a redirect URI per *path*, not per project.** The Supabase-era entry
+`…supabase.co/auth/v1/callback` does not match `…/api/auth/callback/google`. The Google
+OAuth client itself is unchanged and still correct — only the URI list was stale. Removing
+Supabase from the code does not touch Google Cloud, which confused us for a while.
+
+**`next/image` refuses SVG** unless `dangerouslyAllowSVG` is set, so an `<Image
+src="/icon.svg">` breaks the logo on every page. Inline the SVG as a component instead —
+`src/components/Logo.tsx`.
+
+**Interactive zsh does not treat `#` as a comment.** Pasting a multi-line block with
+trailing `# explanations` runs them as arguments, and an apostrophe inside one opens a
+quote that never closes: the shell sits at `quote>` and nothing runs. Paste commands one
+at a time, without comments.
+
+**`vercel link` rewrites `.env.local`.** It adds `VERCEL_OIDC_TOKEN` and pulls down the
+project's variables, which is how `DATABASE_URL` and `AUTH_GOOGLE_SECRET` finally got into
+the local file. Useful, but check the file afterwards rather than assuming.
+
+**`next build` imports every module to collect page data.** A `pg.Pool` built at module
+scope therefore fails the build on any machine without `DATABASE_URL` — including Vercel's
+builder. `src/lib/db.ts` builds the pool on first query instead.
+
+**React flags `setState` inside an effect, and it was right both times.** ESLint found it
+in `WelcomeDialog` and `ReferralForm`; both are now derived during render. A `<dialog>`
+holds its own open state, so drive the element and do not mirror it in React.
+
 ---
 
 ## 9. Security, privacy and tax
@@ -597,13 +699,19 @@ Supabase Auth — authorisation now lives in the server layer (§6).
 
 Small, and it makes Phase 0 genuinely usable.
 
-- **Résumé upload** — Supabase Storage private bucket, signed URLs, 5 MB cap, MIME and
+- **Résumé upload** — Vercel Blob private store, signed URLs, 5 MB cap, MIME and
   magic-byte check, malware scan before the file is readable
-- **Referral detail page** with the dated journey timeline (the table exists, no UI)
-- **Policy and FAQ content** — their own funnel says understanding, not awareness, is the
-  biggest drop, so this is a growth lever, not decoration
-- Delete the stale Google client secret; move Supabase to Pro
+- **Referral detail page.** The journey timeline now renders on the list, but from
+  `showcase.ts` with illustrative offsets from the real `submitted_at`; wire it to
+  `referral_stages` and give each referral its own page
+- ~~**Policy and FAQ content**~~ — done, `/how-to-refer`: five steps, the policy in plain
+  terms, a benefits summary and a slot for the video Comms still owes
+- Delete the stale Google client secret `g80a`, the dead Supabase redirect URI, and the
+  Supabase project itself
+- Rename the Google OAuth client and set the consent-screen name deliberately (§4)
 - Accessibility pass: labels, focus management, keyboard paths, dialog semantics
+- A real domain (`referrals.convegenius.ai`), which also retires `AUTH_URL` and the alias
+  problem in §8
 
 ### Phase 1 — pilot: refer, track, get paid (8–10 weeks)
 
@@ -703,27 +811,29 @@ added to the end.
 
 ## 15. Immediate next actions
 
-**To get Phase 0 running locally — two pastes and two commands:**
+Phase 0 runs, in production, verified by the scripts in §3. What is left is not code.
 
-1. `DATABASE_URL` into `.env.local` — Vercel → Storage → the Neon store → Getting
-   Started → the **.env.local** tab → **Copy Snippet**. Pooled, not unpooled.
-2. `AUTH_GOOGLE_SECRET` into `.env.local` — Google shows a secret once, at creation.
-3. `npm run db:apply` — creates the schema and seeds ten roles against Neon.
-4. `npm run dev`, then sign in at localhost:3000 with a work Google account.
+**Console work nobody has done yet — all of it needs a human with the right logins:**
 
-**Before deploying:** add `AUTH_SECRET` and `AUTH_GOOGLE_SECRET` to Vercel (the Neon
-variables and `AUTH_GOOGLE_ID`, `ALLOWED_EMAIL_DOMAIN`, `NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN`
-are already there), delete the unused `NEXT_PUBLIC_SITE_URL`, and push. Use the
-**Import .env** button rather than adding variables one at a time.
+1. **Delete the Supabase project.** It still answers (`401`, not `404`), so it still
+   exists and still holds a copy of the schema and any rows from before the migration.
+2. Delete the stale Google OAuth secret `****g80a` and the dead
+   `…supabase.co/auth/v1/callback` redirect URI. Google allows only two secrets, so the
+   dead one blocks future rotation.
+3. Set the Google consent-screen name deliberately — it currently reads **"CG HR
+   Portal"** (§4).
+4. **Settle Neon's plan and backups.** §11 rejected the Supabase free tier for having no
+   backups; that objection applies to any free tier holding payout records. Confirm the
+   retention Neon actually gives you, and take a branch or a paid plan for staging.
 
 **Then, in priority order:**
 
-5. Delete the stale Google OAuth secret and the dead Supabase redirect URI on the OAuth
-   client; delete the Supabase project once Neon has been used for a week.
 6. Get §10 in front of HR. **D02, D04, D10, D11 and D12 are the ones that stall
    engineering.**
 7. Confirm which ATS, HRMS, payroll and procurement systems are in use, and who owns the
    credentials. Start this on day one — it is the critical path.
 8. Finance to confirm the tax treatment in writing (D13).
-9. Settle the Neon region, staging database and backup questions in §11.
+9. Get the showcase screens in front of HR while they are cheap to change. That is what
+   they are for, and changing a layout now costs nothing next to changing it after the
+   engines are built.
 10. Build Phase 0.5 while the above is being chased — none of it is blocked by HR.
