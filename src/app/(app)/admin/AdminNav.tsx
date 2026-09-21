@@ -2,6 +2,7 @@ import Link from "next/link";
 
 const TABS = [
   { href: "/admin/rewards", label: "Rewards" },
+  { href: "/admin/pipeline", label: "Reward pipeline" },
   { href: "/admin/sync", label: "Integration health" },
 ];
 

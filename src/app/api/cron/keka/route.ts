@@ -17,6 +17,7 @@ import { syncJobs, reconcileJobs } from "@/lib/keka/jobs";
 import { sweepPendingPushes, pushEnabled } from "@/lib/keka/candidates";
 import { syncReferralStages } from "@/lib/keka/stages";
 import { recordedSync } from "@/lib/keka/sync";
+import { query } from "@/lib/db";
 import { isKekaConfigured } from "@/lib/keka/client";
 
 // pg does not run on the edge, and neither does this.
@@ -112,6 +113,24 @@ export async function GET(request: NextRequest) {
     { full },
   );
 
+  // ---- reward engine ----------------------------------------------------
+  // Runs after stages, because a reward can only exist once the stage sync
+  // has seen the candidate reach Hired. Idempotent, so running it every time
+  // is the whole design.
+  let rewards: { created: number; became_eligible: number } | null = null;
+  let rewardError: string | null = null;
+  try {
+    const [row] = await query<{ created: number; became_eligible: number }>(
+      `select * from refresh_reward_states()`,
+    );
+    rewards = {
+      created: Number(row?.created ?? 0),
+      became_eligible: Number(row?.became_eligible ?? 0),
+    };
+  } catch (e) {
+    rewardError = e instanceof Error ? e.message : String(e);
+  }
+
   // ---- candidate pushes -------------------------------------------------
   // Retries anything the submit-time push could not deliver.
   let pushes: { read: number; written: number; failed: number } | null = null;
@@ -124,7 +143,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const ok = !jobs.error && !stages.error && !reconcileError && !pushError;
+  const ok = !jobs.error && !stages.error && !reconcileError && !pushError && !rewardError;
 
   return NextResponse.json(
     {
@@ -143,6 +162,7 @@ export async function GET(request: NextRequest) {
         detail: stages.result ? (stages.result as { detail: unknown }).detail : null,
         error: stages.error?.message ?? null,
       },
+      rewards: rewards ?? (rewardError ? { error: rewardError } : null),
       reconcile: full
         ? {
             closed: reconciled?.closed ?? null,

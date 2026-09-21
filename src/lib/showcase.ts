@@ -12,126 +12,19 @@
  * a silent fallback.
  */
 
+/** Only copy is left in here now; no invented figures remain. */
 export const IS_SHOWCASE = true;
 
 // ------------------------------------------------------------------ home
-export const homeStats = {
-  referrals: { made: 7, joined: 2, inProgress: 4 },
-  cash: { accumulated: 47000, collected: 20000, toReceive: 27000 },
-  gifts: { earned: 1, inProcess: 1 },
-};
-
-export const latestUpdate = {
-  candidate: "Ananya Rao",
-  headline: "Ananya Rao joined as Data Analyst",
-  detail: "Your ₹12,000 reward is eligible from 14 Oct, after 30 days.",
-  on: "2026-09-14",
-};
-
-// -------------------------------------------------------------- referrals
-// REMOVED 21 Sep 2026. The referral journey now comes from `referral_stages`,
-// filled by the Keka stage sync, and is rendered by visibleJourney() in
-// src/lib/keka/stages.ts. The header of this file says to delete an entry
-// rather than leave a silent fallback when a screen goes live — this is that.
-
 // ---------------------------------------------------------------- rewards
-export type ShowcaseReward = {
-  id: string;
-  candidate: string;
-  role: string;
-  amount: number;
-  kind: "cash" | "gift";
-  status: "Paid" | "Approved, in payroll" | "Eligible from" | "Pending joining";
-  note: string;
-};
-
-export const rewards: ShowcaseReward[] = [
-  {
-    id: "REF-4A21B9C0",
-    candidate: "Ananya Rao",
-    role: "Data Analyst",
-    amount: 12000,
-    kind: "cash",
-    status: "Eligible from",
-    note: "14 Oct 2026, once 30 days are complete",
-  },
-  {
-    id: "REF-77E1D0A4",
-    candidate: "Imran Qureshi",
-    role: "Backend Engineer",
-    amount: 15000,
-    kind: "cash",
-    status: "Approved, in payroll",
-    note: "October payroll · gross, TDS applies",
-  },
-  {
-    id: "REF-1B93C55E",
-    candidate: "Meera Nair",
-    role: "UX Designer",
-    amount: 20000,
-    kind: "cash",
-    status: "Paid",
-    note: "Paid with August salary",
-  },
-  {
-    id: "REF-2C40FA18",
-    candidate: "Rohit Deshmukh",
-    role: "Field Coordinator",
-    amount: 6000,
-    kind: "gift",
-    status: "Pending joining",
-    note: "Smartwatch · dispatched once they complete 90 days",
-  },
-];
-
-export const nextMilestone = {
-  name: "Smartphone",
-  achieved: 2,
-  target: 3,
-  blurb: "One more referral who joins unlocks this.",
-};
-
-export const milestones = [
-  { name: "Smartwatch", at: 1, unlocked: true },
-  { name: "Smartphone", at: 3, unlocked: false },
-  { name: "Harley ride experience", at: 6, unlocked: false },
-];
-
 // ------------------------------------------------------------ leaderboard
-export type LeaderboardPeriod = "monthly" | "quarterly" | "yearly" | "all-time";
-
-export const LEADERBOARD_PERIODS: { id: LeaderboardPeriod; label: string }[] = [
-  { id: "monthly", label: "This month" },
-  { id: "quarterly", label: "This quarter" },
-  { id: "yearly", label: "This year" },
-  { id: "all-time", label: "All time" },
-];
-
-export const leaderboard: Record<
-  LeaderboardPeriod,
-  { name: string; department: string; joined: number; earned: number }[]
-> = {
-  monthly: [
-    { name: "Kavita Menon", department: "Programs", joined: 2, earned: 40000 },
-    { name: "Arjun Pillai", department: "Engineering", joined: 1, earned: 15000 },
-    { name: "Sana Fatima", department: "Content", joined: 1, earned: 10000 },
-  ],
-  quarterly: [
-    { name: "Arjun Pillai", department: "Engineering", joined: 4, earned: 62000 },
-    { name: "Kavita Menon", department: "Programs", joined: 3, earned: 55000 },
-    { name: "Devika Iyer", department: "Data & Insights", joined: 2, earned: 30000 },
-  ],
-  yearly: [
-    { name: "Kavita Menon", department: "Programs", joined: 9, earned: 168000 },
-    { name: "Arjun Pillai", department: "Engineering", joined: 7, earned: 121000 },
-    { name: "Nikhil Barman", department: "Government Relations", joined: 5, earned: 105000 },
-  ],
-  "all-time": [
-    { name: "Kavita Menon", department: "Programs", joined: 21, earned: 392000 },
-    { name: "Arjun Pillai", department: "Engineering", joined: 18, earned: 310000 },
-    { name: "Nikhil Barman", department: "Government Relations", joined: 12, earned: 244000 },
-  ],
-};
+// ALL REMOVED 21 Sep 2026. Home, My rewards and the leaderboard now read the
+// real ledger: src/lib/rewards.ts over referral_rewards, milestone_tiers and
+// referrals.joined_at, filled by the Keka stage sync reaching `Hired`.
+//
+// What remains below is content, not invented figures — the gift tiers shown
+// on the welcome dialog and how-to page, and the policy wording. Those are
+// copy awaiting HR sign-off rather than numbers pretending to be data.
 
 // ------------------------------------------------------------- benefits
 export const benefits = [

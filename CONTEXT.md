@@ -7,7 +7,7 @@ are, what is decided, what is not, and what every remaining phase contains.
 | | |
 | --- | --- |
 | Last updated | 21 September 2026 |
-| Phase | **0 complete. Phase 1 in progress** — Keka jobs sync live, stage pull built, referral detail page, admin rewards + integration health. Candidate push blocked; HRIS/payroll blocked on scopes. See §16 |
+| Phase | **0 complete. Phase 1 substantially built** — jobs sync live, stage pull, reward ledger with approval and payment, milestones, leaderboard, four admin screens. **No invented data remains on any screen.** Candidate push and automatic payroll still blocked. See §16–§19 |
 | Auth | **Auth.js (NextAuth v5) + Google, JWT sessions.** Supabase Auth was removed on 16 Sep 2026 |
 | Local path | `/Users/pradyumnawasthi/referral-hub` (was `~/Downloads/referral-hub`) |
 | Owner | Pradyumn Awasthi (pradyumn@convegenius.ai) |
@@ -1299,3 +1299,89 @@ which is convention 3 untouched. `npm run e2e:rewards` covers all of it.
 - **Candidate push** (`keka_push_candidates` = false) — blocked on the salary fields
 - **HRIS and payroll** — the API key is denied those scopes
 - Hourly sync — needs Vercel Pro
+
+---
+
+## 19. The reward ledger
+
+Built 21 September 2026. This is the part of the product Keka does not do, and
+therefore the actual answer to *"why not just refer through Keka?"*.
+
+Keka runs recruitment. It has no concept of a referral reward, no eligibility clock, and
+no record of what an employee is owed. §1 commitment 3 — *a promise made is a promise
+kept* — is what this section implements.
+
+### It is buildable now, and why
+
+A 30-job scan of 2,643 candidates on 21 Sep proved Keka reports the whole pipeline with
+the recruitment scopes we already hold:
+
+```
+Sourced 2478 · Shortlisted 94 · Interview L1 29 · Hired 20
+Interview L2 10 · Preboarding 8 · Interview L3 4
+```
+
+**`Hired` is the signal the entire ledger hangs on, and we can already see it.** So the
+ledger did not wait on HRIS or payroll access.
+
+### The shape
+
+`referral_rewards` holds one row per referral that actually resulted in a hire — nothing
+is created at referral time, because until somebody joins nothing is owed. States run
+`pending_joining → eligible → approved → paid`, with `forfeited` off to one side.
+
+`reward_events` is append-only and every status change writes one in the same
+transaction as the state change (convention 1). The prototype wrote audit rows for
+changes that never happened; this shape makes that impossible.
+
+`refresh_reward_states()` is the engine: idempotent, run by the nightly cron, creates
+rows for new joiners and flips anything whose qualifying period has elapsed. **It never
+approves anything.** Approval is a human act with a name against it (D17), and
+automating it would be exactly the prototype's mistake.
+
+### Rules worth not relitigating
+
+- **Approval is refused on an amount nobody agreed to.** A role whose reward was never
+  set carries a placeholder; approving it would commit the company to a number that was
+  never a decision. `approve_reward()` raises instead.
+- **Only agreed, reached amounts are counted as money.** "Earned" on `/rewards` sums
+  eligible, approved and paid where the amount was actually agreed. A placeholder is
+  never totalled up and shown to an employee as something they have earned.
+- **Milestones count people who joined, not referrals made.** Same for the leaderboard —
+  a programme that ranked volume over judgement would fill the pipeline with noise.
+- **The leaderboard is off by default** (`leaderboard_enabled`). §12 treats publicly
+  ranking colleagues as a culture decision for HR, not an engineering default. It works;
+  it is simply not shown until someone turns it on.
+- **The earliest `Hired` stage wins** as the joining date, so a later correction in Keka
+  cannot push an employee's qualifying clock backwards.
+
+### What it does NOT do, and why
+
+| Missing | Because | Consequence |
+| --- | --- | --- |
+| True date of joining | `/v1/hris/employees` is 403 | The `Hired` stage date stands in. Usually close, not always right |
+| "Still employed on day 30?" | Same | A hire who leaves in week two still shows a reward as owed |
+| Automatic payment | `/v1/payroll/*` is 403 | HR marks a reward paid by hand, with a reference |
+
+All three are additive. Widening the Keka key upgrades this from *good* to *correct*
+without changing the state machine.
+
+### No invented data remains
+
+`src/lib/showcase.ts` now holds **copy only** — the gift-tier blurbs on the welcome
+dialog and the policy wording. Every figure on every screen comes from the database.
+`PreviewTag` and `ShowcaseNotice` in `src/components/Chrome.tsx` are consequently unused;
+they are left in place for the next screen that needs them.
+
+`/how-to-refer` reads `milestone_tiers` rather than a second hardcoded copy of the gift
+ladder, so the two cannot drift.
+
+### Tests
+
+| Command | Assertions |
+| --- | --- |
+| `npm run e2e:engine` | 21 — the full life of a reward, the audit trail, refusal on an unagreed amount, the qualifying gate |
+| `npm run e2e:rewards` | 10 — a referral never shows an amount nobody agreed to |
+| `npm run e2e:stages` | 15 — stage matching, idempotency, unmapped stages |
+| `npm run e2e:admin` | 13 — admin routes and the predicate |
+| `npm run keka:check` | 52 — the Keka ↔ Hub mapping |

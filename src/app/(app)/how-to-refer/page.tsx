@@ -1,9 +1,17 @@
 import Link from "next/link";
 import { requireSignedInUser } from "@/lib/employees";
-import { benefits, howToSteps, policyPoints } from "@/lib/showcase";
+import { howToSteps, policyPoints } from "@/lib/showcase";
+import { query } from "@/lib/db";
 import { Card, PageHead } from "@/components/Chrome";
 
 export default async function HowToReferPage() {
+  // The same milestone_tiers rows /rewards reads. Two hardcoded copies of the
+  // gift ladder would drift the moment HR changed one of them.
+  const benefits = await query<{ name: string; threshold: number }>(
+    `select name, threshold from milestone_tiers where is_active
+      order by sort_order, threshold`,
+  );
+
   await requireSignedInUser();
 
   return (
@@ -71,14 +79,15 @@ export default async function HowToReferPage() {
                 <li key={b.name} className="flex items-baseline justify-between gap-3">
                   <span className="text-[14px] font-medium">{b.name}</span>
                   <span className="text-[12.5px] whitespace-nowrap text-[var(--color-mint)]">
-                    {b.at}
+                    {b.threshold} {b.threshold === 1 ? "referral joins" : "referrals join"}
                   </span>
                 </li>
               ))}
             </ul>
             <p className="mt-4 border-t border-[var(--color-line)] pt-3 text-[12.5px] leading-relaxed text-[var(--color-ink-3)]">
-              Cash rewards vary by role and are shown on each opening. Milestone gifts arrive in
-              a later phase.
+              Cash rewards vary by role and are shown on each opening. Milestone progress is
+              tracked on your rewards page; ordering and delivery of the gift itself is
+              handled by HR.
             </p>
           </Card>
         </div>
