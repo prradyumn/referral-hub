@@ -12,7 +12,9 @@
     "env:set": "node scripts/set-secrets.mjs",
     "keka:check": "node scripts/keka-mapping-check.mjs",
     "keka:verify": "node --env-file=.env.local scripts/keka-verify.mjs",
-    "keka:discover": "node --env-file=.env.local scripts/keka-discover.mjs"
+    "keka:discover": "node --env-file=.env.local scripts/keka-discover.mjs",
+    "e2e:admin": "node --env-file=.env.local scripts/e2e-admin.mjs",
+    "e2e:stages": "node --env-file=.env.local scripts/e2e-stages.mjs"
   },
   "dependencies": {
     "next": "^16.3.5",

@@ -15,6 +15,7 @@ import { timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { syncJobs, reconcileJobs } from "@/lib/keka/jobs";
 import { sweepPendingPushes, pushEnabled } from "@/lib/keka/candidates";
+import { syncReferralStages } from "@/lib/keka/stages";
 import { recordedSync } from "@/lib/keka/sync";
 import { isKekaConfigured } from "@/lib/keka/client";
 
@@ -99,6 +100,18 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // ---- candidate stages -------------------------------------------------
+  // Only polls jobs the Hub has referrals against, so this costs nothing
+  // until someone has actually referred a person.
+  const stages = await recordedSync(
+    "candidates",
+    async (since) => {
+      const r = await syncReferralStages(full ? null : since);
+      return { read: r.read, written: r.written, watermark: r.watermark, detail: r };
+    },
+    { full },
+  );
+
   // ---- candidate pushes -------------------------------------------------
   // Retries anything the submit-time push could not deliver.
   let pushes: { read: number; written: number; failed: number } | null = null;
@@ -111,7 +124,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const ok = !jobs.error && !reconcileError && !pushError;
+  const ok = !jobs.error && !stages.error && !reconcileError && !pushError;
 
   return NextResponse.json(
     {
@@ -124,6 +137,11 @@ export async function GET(request: NextRequest) {
         written: jobs.run.records_written,
         detail: jobs.result ? (jobs.result as { detail: unknown }).detail : null,
         error: jobs.error?.message ?? null,
+      },
+      stages: {
+        status: stages.run.status,
+        detail: stages.result ? (stages.result as { detail: unknown }).detail : null,
+        error: stages.error?.message ?? null,
       },
       reconcile: full
         ? {

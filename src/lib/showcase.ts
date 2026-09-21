@@ -29,19 +29,10 @@ export const latestUpdate = {
 };
 
 // -------------------------------------------------------------- referrals
-export type ShowcaseStage = {
-  stage: string;
-  on: string | null;
-  state: "done" | "current" | "upcoming";
-};
-
-export const referralJourney: ShowcaseStage[] = [
-  { stage: "Referral submitted", on: "2026-08-21", state: "done" },
-  { stage: "Profile shortlisted", on: "2026-08-25", state: "done" },
-  { stage: "Interview in progress", on: "2026-09-02", state: "current" },
-  { stage: "Offer", on: null, state: "upcoming" },
-  { stage: "Joined", on: null, state: "upcoming" },
-];
+// REMOVED 21 Sep 2026. The referral journey now comes from `referral_stages`,
+// filled by the Keka stage sync, and is rendered by visibleJourney() in
+// src/lib/keka/stages.ts. The header of this file says to delete an entry
+// rather than leave a silent fallback when a screen goes live — this is that.
 
 // ---------------------------------------------------------------- rewards
 export type ShowcaseReward = {

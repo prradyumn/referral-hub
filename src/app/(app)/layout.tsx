@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { signOut } from "@/auth";
 import { requireSignedInUser } from "@/lib/employees";
+import { isAdmin } from "@/lib/admin";
 import { initials } from "@/lib/format";
 import WelcomeDialog from "@/components/WelcomeDialog";
 import Logo from "@/components/Logo";
@@ -14,11 +15,27 @@ const NAV = [
   { href: "/how-to-refer", label: "How to refer" },
 ];
 
+// One entry, not two. Two admin links pushed the header past its width and
+// the second label was truncated mid-word; the admin screens carry their own
+// sub-navigation instead.
+const ADMIN_NAV = [{ href: "/admin/rewards", label: "Admin" }];
+
 export default async function AppLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  // Session only — no database. The shell renders whether or not Postgres is up.
+  // Session only for identity — the shell renders whether or not Postgres is up.
   const user = await requireSignedInUser();
+
+  // The admin link is hidden from everyone else, but hiding a link is not a
+  // permission: requireAdmin() in src/lib/admin.ts is what actually guards
+  // those routes. This just avoids showing a door that will not open.
+  // Failing closed keeps the header rendering when the database is down.
+  let showAdmin = false;
+  try {
+    showAdmin = await isAdmin(user.email);
+  } catch {
+    showAdmin = false;
+  }
 
   return (
     <div className="min-h-screen">
@@ -30,7 +47,7 @@ export default async function AppLayout({
           </Link>
 
           <nav className="-mx-1 flex flex-1 items-center gap-0.5 overflow-x-auto px-1">
-            {NAV.map((item) => (
+            {[...NAV, ...(showAdmin ? ADMIN_NAV : [])].map((item) => (
               <Link
                 key={item.href}
                 href={item.href}

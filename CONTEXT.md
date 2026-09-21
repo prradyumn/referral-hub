@@ -7,7 +7,7 @@ are, what is decided, what is not, and what every remaining phase contains.
 | | |
 | --- | --- |
 | Last updated | 21 September 2026 |
-| Phase | **0 complete. Phase 1 jobs sync is LIVE** — 906 Keka jobs synced, 56 open roles browsable, referral flow re-verified against them on 21 Sep 2026. Candidate push still blocked, see §16 |
+| Phase | **0 complete. Phase 1 in progress** — Keka jobs sync live, stage pull built, referral detail page, admin rewards + integration health. Candidate push blocked; HRIS/payroll blocked on scopes. See §16 |
 | Auth | **Auth.js (NextAuth v5) + Google, JWT sessions.** Supabase Auth was removed on 16 Sep 2026 |
 | Local path | `/Users/pradyumnawasthi/referral-hub` (was `~/Downloads/referral-hub`) |
 | Owner | Pradyumn Awasthi (pradyumn@convegenius.ai) |
@@ -900,11 +900,16 @@ blocked* explains why, and it is a policy decision rather than a coding task.
 | Jobs pull and reconcile | `src/lib/keka/jobs.ts` | **Live** — 906 read, 906 written, 11.7s |
 | Candidate push | `src/lib/keka/candidates.ts` | **Blocked** — see *The push is blocked* |
 | Sync run recording and health | `src/lib/keka/sync.ts` | Live, recording runs |
-| Scheduled entry point | `src/app/api/cron/keka/route.ts` | Live locally; Vercel cron not yet on |
+| Scheduled entry point | `src/app/api/cron/keka/route.ts` | **Deployed**, daily cron on Vercel |
 | Credential + scope audit | `scripts/keka-verify.mjs` | **Run 21 Sep: passes, least privilege confirmed** |
 | Tenant reconnaissance | `scripts/keka-discover.mjs` | **Run 21 Sep: see the tenant table below** |
 | Mapping tests | `scripts/keka-mapping-check.mjs` | `npm run keka:check` |
-| Schema | `db/0003_keka.sql` | **Applied to Neon** 21 Sep |
+| Schema | `db/0003_keka.sql`, `db/0004_stages_and_admin.sql` | **Applied to Neon** 21 Sep |
+| Stage pull | `src/lib/keka/stages.ts` | Built; 15 assertions in `e2e-stages` |
+| Referral detail page | `src/app/(app)/referrals/[id]/page.tsx` | Live |
+| Admin — rewards | `src/app/(app)/admin/rewards/` | Live |
+| Admin — integration health | `src/app/(app)/admin/sync/page.tsx` | Live |
+| Admin authorisation | `src/lib/admin.ts` | 13 assertions in `e2e-admin` |
 
 ### Credentials and how they are protected
 
@@ -1125,11 +1130,19 @@ rather than skipping it forever.
 
 ### Scheduling
 
-`vercel.json` registers two crons: hourly incremental, and a full run with reconcile at
-02:30. **Vercel's Hobby plan allows daily cron only** — the team is on Hobby (§4), so
-hourly needs Pro. The §11 cost table already budgets $20/month for hosting, so this is a
-planned spend rather than a surprise, but the hourly schedule will not fire until the plan
-changes.
+`vercel.json` registers **one** cron: a full sync with reconcile at 02:30 UTC (08:00 IST).
+
+It was originally two — hourly incremental plus a nightly full run — but **Vercel's Hobby
+plan rejects any schedule more frequent than daily**, which would have failed the deploy
+outright. On Pro, change it back to:
+
+```json
+{ "path": "/api/cron/keka",        "schedule": "0 * * * *" },
+{ "path": "/api/cron/keka?full=1", "schedule": "30 2 * * *" }
+```
+
+Until then roles refresh once a day rather than hourly. The §11 cost table already budgets
+$20/month for hosting, so the upgrade is planned rather than a surprise.
 
 `/api/cron` is exempted in `src/proxy.ts`. Without that the proxy redirects the scheduler
 to `/login` and the sync silently never runs. It authorises on `CRON_SECRET` and **refuses
@@ -1168,3 +1181,121 @@ exactly the input `keka_open_job_statuses` and `keka_stage_map` need.
 - HRIS sync for employees, which also settles **D04** (`/hris/noticeperiods` and the exit
   request endpoints do expose notice period) and **D06** (joining and confirmation dates)
 - Decide whether reward payout uses the payroll API or a file (D05, D13)
+
+---
+
+## 17. What was built on 21 September 2026, after the sync went live
+
+Everything here needed no new credential, decision or budget — it is the work that was
+not blocked on anybody.
+
+### The referral journey is real
+
+`src/lib/keka/stages.ts` pulls candidate stages from Keka and appends them to
+`referral_stages`. **`referralJourney` has been deleted from `src/lib/showcase.ts`** — the
+timeline on `/referrals` is now the thing that actually happened, not illustrative
+offsets from `submitted_at`.
+
+Three rules hold it together:
+
+- **Only jobs the Hub has referrals against are polled.** Keka holds 502 candidates on a
+  single job. Pulling candidates nobody here referred would burn the 50/min limit and
+  hold data we have no business holding. Zero referrals means zero API calls.
+- **Matching is by normalised email**, via the same `normalise_email()` that
+  `submit_referral` used when the referral was taken, so the two sides agree by
+  construction. It survives plus-addressing and case, and it does not depend on the
+  candidate push ever being switched on.
+- **`interviews` and `scorecards` are never fetched.** Commitment 2.
+
+`scripts/e2e-stages.mjs` (`npm run e2e:stages`) covers matching, idempotency, and that an
+unrecognised stage is stored but never shown. It caught a real bug: the first version
+decided "nothing changed" by comparing against the stage with the latest `occurred_at`,
+which breaks whenever Keka's stage predates the Hub's own "Referral submitted" row — a
+candidate already in Keka before being referred. The timeline grew a duplicate every
+hour. The idempotency key is now `(referral_id, stage, occurred_at)` with a unique index
+behind it, and an out-of-order older stage can no longer rewind `current_stage`.
+
+### Admin, and the §6 decision it forced
+
+§6 required a deliberate choice before the first multi-role feature. **The decision:
+authorisation stays in the server layer. RLS is not reintroduced.** The reasoning is in
+the header of `src/lib/admin.ts`; the short version is that Auth.js puts no identity into
+the Postgres session, the pooled Neon connection makes `set local` easy to get subtly
+wrong, and one admin role is not the case that justifies two enforcement layers. A
+half-and-half state is the thing §6 warns against.
+
+The cost is that `requireAdmin()` is the only thing between an employee and the admin
+screens, so it is the first statement of every admin route and every admin server action,
+and `scripts/e2e-admin.mjs` proves a non-admin is refused at both the route and the
+predicate. **Run it whenever anything under `/admin` changes.**
+
+Admin is granted by `employees.is_admin`, with `app_settings.admin_emails` as a bootstrap
+so a database can never lock itself out. `pradyumn@convegenius.ai` is currently the only
+admin.
+
+### Rewards are now HR's to set, not a spreadsheet request
+
+`/admin/rewards` lists every open role with its reward, eligibility window and priority
+flag, filterable by department and by whether a reward has been set, plus a bulk action
+that applies one figure across a department's unset roles. Saving sets
+`reward_confirmed = true`, which is what turns "To be confirmed" into a real figure on
+`/roles`.
+
+This was deliberately built before asking HR for the numbers: 56 roles set one at a time
+through an engineer is the kind of task that never gets done.
+
+### Integration health
+
+`/admin/sync` renders what convention 10 asks for — every run recorded, anything without
+a success in 24 hours raised as an alert, the stage-wording table with how often each
+stage has actually been seen, and counts that reconcile. It is the alerting surface until
+real alerting exists.
+
+### Test suite as it stands
+
+| Command | Covers |
+| --- | --- |
+| `npm run keka:check` | 52 assertions on the Keka ↔ Hub mapping. No credentials needed |
+| `npm run keka:verify` | Credential works, and least privilege is confirmed |
+| `npm run e2e:stages` | 15 assertions: stage matching, idempotency, unmapped stages |
+| `npm run e2e:admin` | 13 assertions: admin routes and the predicate itself |
+| `scripts/e2e-refer.mjs` | The referral flow, against a real Keka job |
+| `scripts/e2e-scoping.mjs` | One employee cannot see another's candidates |
+
+---
+
+## 18. Production deployment, 21 September 2026
+
+Deployed to `https://referral-hub-prradyumns-projects.vercel.app`.
+
+**Vercel environment variables added** (Production scope only): `KEKA_COMPANY`,
+`KEKA_CLIENT_ID`, `KEKA_CLIENT_SECRET`, `KEKA_API_KEY`, `KEKA_ENV`, `CRON_SECRET`.
+
+Deliberately **not** added to Preview. §11 wants Preview deployments kept away from
+production rows, and with Keka unconfigured there the sync route answers 503 and does
+nothing — it fails safe rather than syncing into whatever database a preview points at.
+Add them to Preview only once a staging Neon store exists.
+
+**A bug fixed on the way out the door.** `/referrals` read `reward_confirmed` from the
+job's *current* state rather than from when the referral was made. A referral taken while
+a role had no agreed reward would therefore have started displaying the ₹10,000
+placeholder as a real figure the moment HR confirmed a different amount — breaking the
+one promise this product is built on. `referrals.reward_confirmed_snapshot` now records
+whether anything was actually agreed, and `set_job_reward()` settles referrals taken
+while nothing was: those employees were promised nothing specific, so they get the first
+real rate rather than the placeholder. A referral made when a rate *did* apply keeps it,
+which is convention 3 untouched. `npm run e2e:rewards` covers all of it.
+
+### What is live, and what it looks like to an employee
+
+- Sign in, browse **56 real Keka roles**, refer someone, track them
+- Every reward reads **"To be confirmed"**, because none have been set yet. Referrals can
+  still be made and the amount is settled fairly once HR sets one
+- The journey timeline is real, from `referral_stages`
+- Admin screens visible only to `pradyumn@convegenius.ai`
+
+### Still not on
+
+- **Candidate push** (`keka_push_candidates` = false) — blocked on the salary fields
+- **HRIS and payroll** — the API key is denied those scopes
+- Hourly sync — needs Vercel Pro

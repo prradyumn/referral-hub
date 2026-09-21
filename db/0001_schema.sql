@@ -241,12 +241,24 @@ begin
     exit when not exists (select 1 from referrals where referrals.ref_code = v_code);
   end loop;
 
+  -- reward_confirmed only exists once db/0003 has run, so read it defensively:
+  -- this file must stay runnable on its own against an empty database.
   insert into referrals
     (ref_code, referrer_id, candidate_id, job_id, relationship, valid_until,
      reward_amount_snapshot, eligibility_days_snapshot, consent_text)
   values
     (v_code, p_referrer_id, v_candidate, v_job.id, p_relationship, now() + v_window,
      v_job.reward_amount, v_job.eligibility_days, trim(p_consent_text));
+
+  -- Carry through whether that figure was one anybody had actually agreed to.
+  if exists (select 1 from information_schema.columns
+              where table_name = 'referrals' and column_name = 'reward_confirmed_snapshot')
+  then
+    execute 'update referrals set reward_confirmed_snapshot = coalesce((
+               select j.reward_confirmed from jobs j where j.id = $1), false)
+              where ref_code = $2'
+      using v_job.id, v_code;
+  end if;
 
   insert into referral_stages (referral_id, stage)
   select id, 'Referral submitted' from referrals where referrals.ref_code = v_code;
