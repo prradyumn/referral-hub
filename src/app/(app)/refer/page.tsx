@@ -12,7 +12,8 @@ export default async function ReferPage({
   const sp = await searchParams;
 
   const jobs = await query<JobOption>(
-    `select id, title, location, department, reward_amount, eligibility_days
+    `select id, title, location, department, reward_amount, reward_confirmed,
+            eligibility_days
        from public.jobs
       where is_open
       order by is_priority desc, title`,

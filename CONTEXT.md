@@ -6,10 +6,10 @@ are, what is decided, what is not, and what every remaining phase contains.
 
 | | |
 | --- | --- |
-| Last updated | 17 September 2026 |
-| Phase | **0 running end to end on Neon, verified 16 Sep 2026.** Phase 1 not started |
+| Last updated | 21 September 2026 |
+| Phase | **0 complete. Phase 1 jobs sync is LIVE** — 906 Keka jobs synced, 56 open roles browsable, referral flow re-verified against them on 21 Sep 2026. Candidate push still blocked, see §16 |
 | Auth | **Auth.js (NextAuth v5) + Google, JWT sessions.** Supabase Auth was removed on 16 Sep 2026 |
-| Local path | `/Users/pradyumnawasthi/Downloads/referral-hub` |
+| Local path | `/Users/pradyumnawasthi/referral-hub` (was `~/Downloads/referral-hub`) |
 | Owner | Pradyumn Awasthi (pradyumn@convegenius.ai) |
 | Companion docs | Build spec and decision log — see §14 |
 
@@ -126,8 +126,13 @@ from Google — so the domain rule is holding in practice, not just in theory.
 
 ### Not built yet
 
-No résumé upload (the field is absent, not broken). No admin portal. No ATS or HRMS
-connection — roles are seeded and referral status stays at `submitted` forever.
+No résumé upload (the field is absent, not broken). No admin portal.
+
+**The ATS and HRMS system is Keka**, confirmed 21 September 2026 — Keka Hire, Keka HRIS
+and Keka Payroll are all licensed. The jobs sync and the candidate push are **written but
+have never been run against the tenant**; roles are still seeded and referral status still
+stays at `submitted`. §16 covers what is built, what is unverified, and the two facts
+about the tenant that no amount of reading the documentation will supply.
 
 **Rewards, gifts, milestones and the leaderboard have screens but no features.** They read
 from `src/lib/showcase.ts` and every one carries a visible "Sample data" marker, with the
@@ -233,9 +238,10 @@ backup.
 
 **Production works.** Sign-in, roles, refer and My referrals all run against Neon.
 
-The code reads exactly four variables — `DATABASE_URL`, `AUTH_GOOGLE_ID`,
+The code reads four variables for the app itself — `DATABASE_URL`, `AUTH_GOOGLE_ID`,
 `AUTH_GOOGLE_SECRET`, `ALLOWED_EMAIL_DOMAIN` — plus `AUTH_SECRET` and `AUTH_URL`, which
-Auth.js reads itself. `grep -rhoE 'process\.env\.[A-Z_0-9]+' src/` is the whole list;
+Auth.js reads itself, and since 21 Sep the Keka set: `KEKA_COMPANY`, `KEKA_CLIENT_ID`,
+`KEKA_CLIENT_SECRET`, `KEKA_API_KEY`, `KEKA_ENV` and `CRON_SECRET` (§16). `grep -rhoE 'process\.env\.[A-Z_0-9]+' src/` is the whole list;
 everything else in the dashboard is either Neon's or dead.
 
 `AUTH_URL` is set to the production URL on purpose. Vercel serves the same deployment on
@@ -256,14 +262,18 @@ referral-hub/
 ├── .env.local                        ← secrets, gitignored
 ├── .env.local.bak-supabase           ← pre-migration copy, also gitignored
 ├── .env.example
+├── vercel.json                       ← the two Keka cron schedules (§16)
 ├── db/
 │   ├── 0001_schema.sql               ← the whole schema, plain PostgreSQL 14+
-│   └── 0002_seed.sql                 ← ten open roles
+│   ├── 0002_seed.sql                 ← ten open roles
+│   └── 0003_keka.sql                 ← Keka ids, stage map, sync runs (§16)
 ├── scripts/
 │   ├── apply-schema.mjs              ← npm run db:apply — applies db/*.sql in order
 │   ├── e2e-refer.mjs                 ← submits a referral, checks the rows, cleans up
 │   ├── e2e-scoping.mjs               ← proves My referrals is scoped (run on any change
 │   │                                   to referrals/page.tsx)
+│   ├── keka-discover.mjs             ← read-only tenant reconnaissance (§16)
+│   ├── keka-mapping-check.mjs        ← 37 assertions on the Keka ↔ Hub mapping
 │   └── shoot.mjs                     ← screenshots every screen, signed in, no Google
 ├── eslint.config.mjs                 ← flat config; `next lint` no longer exists
 └── src/
@@ -276,6 +286,12 @@ referral-hub/
     │   ├── Chrome.tsx                ← PageHead, PreviewTag, StatGroup, ShowcaseNotice
     │   └── Logo.tsx                  ← the mark, inlined (next/image rejects SVG)
     ├── lib/
+    │   ├── keka/
+    │   │   ├── client.ts             ← token, rate limit, paging, retry. Node only
+    │   │   ├── map.ts                ← pure Keka ↔ Hub mapping, imports nothing
+    │   │   ├── jobs.ts               ← jobs pull and reconcile
+    │   │   ├── candidates.ts         ← candidate push and the retry sweeper
+    │   │   └── sync.ts               ← run recording, watermarks, health
     │   ├── db.ts                     ← lazy pg.Pool on the pooler, Node runtime only
     │   ├── employees.ts              ← signedInUser() (no DB) and currentEmployee() (DB)
     │   ├── showcase.ts               ← invented data for the unbuilt screens
@@ -286,6 +302,7 @@ referral-hub/
         ├── icon.svg                  ← favicon (Next serves app/icon.svg automatically)
         ├── login/page.tsx            ← Google button, domain hint, error display
         ├── api/auth/[...nextauth]/route.ts   ← Auth.js handlers
+        ├── api/cron/keka/route.ts     ← the scheduled Keka sync (§16)
         ├── auth/popup/page.tsx       ← starts OAuth inside the popup
         ├── auth/complete/page.tsx    ← messages the opener, closes itself
         └── (app)/
@@ -317,6 +334,9 @@ With the dev server running:
 node --env-file=.env.local scripts/e2e-refer.mjs     # writes and deletes rows
 node --env-file=.env.local scripts/e2e-scoping.mjs   # writes and deletes rows
 node --env-file=.env.local scripts/shoot.mjs         # screenshots into .screenshots/
+
+npm run keka:check                                   # mapping tests, no credentials
+npm run keka:discover                                # read-only Keka reconnaissance
 ```
 
 Both e2e scripts write to whatever `DATABASE_URL` points at. Do not run them against
@@ -718,9 +738,15 @@ Small, and it makes Phase 0 genuinely usable.
 Everything marked P0. Requires Phase 0 of the *decisions* — the integration contracts —
 to be settled first.
 
-**Integrations.** ATS adapter (hourly pull: jobs, candidates, stage changes, idempotent
-upsert on external ID). HRMS adapter (nightly: identity, department, manager, location,
-status, join and exit dates). Payroll (monthly file out, confirmation file in).
+**Integrations.** All three are **Keka** (§16), which is a material simplification of
+what this section originally assumed: one vendor, one credential, one client, rather than
+three unknown systems. ATS adapter (hourly pull: jobs, candidates, stage changes,
+idempotent upsert on external ID) — **jobs pull and candidate push are built**. HRMS
+adapter (nightly: identity, department, manager, location, status, join and exit dates).
+Payroll — **an API, not the file exchange assumed here**: Keka exposes
+`GET /payroll/bonustypes` and `PUT /payroll/paygroups/paycycles/adhoctransactions`, so a
+reward can be posted as an ad-hoc payroll transaction. Confirm with finance before using
+it; D13 still governs the tax treatment.
 
 **Engines.** Status mapping (ATS stage → employee wording → notification, including
 deliberately silent stages). Eligibility (scheduled job flipping rewards eligible at day
@@ -798,6 +824,7 @@ added to the end.
 | Adoption stalls | Medium | Ship policy and how-to content as P0; measure the funnel from day one |
 | Scope creep from the prototype's fifteen admin screens | Medium | The priority bands are the defence. Phase 1 ships six |
 
+
 ---
 
 ## 14. Companion documents
@@ -811,7 +838,9 @@ added to the end.
 
 ## 15. Immediate next actions
 
-Phase 0 runs, in production, verified by the scripts in §3. What is left is not code.
+Phase 0 runs, in production, verified by the scripts in §3. The Keka integration is
+written but unverified (§16), so what is left is one console errand, one read-only script
+run, and the decisions.
 
 **Console work nobody has done yet — all of it needs a human with the right logins:**
 
@@ -826,14 +855,316 @@ Phase 0 runs, in production, verified by the scripts in §3. What is left is not
    backups; that objection applies to any free tier holding payout records. Confirm the
    retention Neon actually gives you, and take a branch or a paid plan for staging.
 
+**Keka, now that it is confirmed as the ATS, HRMS and payroll system (§16):**
+
+5. **Run `npm run keka:discover` against the tenant.** Nothing else in the integration can
+   be verified until it has, and it answers the two questions the documentation cannot:
+   which `JobStatus` values mean open, and what the hiring stage ids are. It is read-only.
+   Then apply `db/0003_keka.sql` and run one full sync.
+
 **Then, in priority order:**
 
 6. Get §10 in front of HR. **D02, D04, D10, D11 and D12 are the ones that stall
    engineering.**
-7. Confirm which ATS, HRMS, payroll and procurement systems are in use, and who owns the
-   credentials. Start this on day one — it is the critical path.
+7. ~~Confirm which ATS, HRMS and payroll systems are in use~~ — **Keka, all three**,
+   confirmed 21 Sep 2026, credentials in hand (§16). Procurement is still unconfirmed.
+   Note that Keka can settle **D04** and **D06** by inspection rather than by waiting on
+   HR: `/hris/noticeperiods` and the exit-request endpoints do expose notice period.
 8. Finance to confirm the tax treatment in writing (D13).
 9. Get the showcase screens in front of HR while they are cheap to change. That is what
    they are for, and changing a layout now costs nothing next to changing it after the
    engines are built.
 10. Build Phase 0.5 while the above is being chased — none of it is blocked by HR.
+
+---
+
+## 16. Keka integration
+
+Added 21 September 2026. ConveGenius runs **Keka Hire (ATS), Keka HRIS and Keka Payroll**,
+so all three Phase 1 integrations are one vendor behind one credential.
+
+**The jobs sync is live.** As of 21 September 2026 the Hub reads its roles from Keka:
+906 jobs pulled in 11.7s, 56 open and browsable at `/roles`, the ten prototype roles
+retired, and the referral flow re-verified end to end against a real Keka job by
+`scripts/e2e-refer.mjs` and `scripts/e2e-scoping.mjs`.
+
+The **candidate push is still blocked** — it has never been executed. §16 *The push is
+blocked* explains why, and it is a policy decision rather than a coding task.
+
+### What is built
+
+| Piece | File | State |
+| --- | --- | --- |
+| API client — token cache, rate limit, paging, retry | `src/lib/keka/client.ts` | Auth + paging verified live |
+| Pure Keka ↔ Hub mapping | `src/lib/keka/map.ts` | 52 assertions, all passing |
+| Jobs pull and reconcile | `src/lib/keka/jobs.ts` | **Live** — 906 read, 906 written, 11.7s |
+| Candidate push | `src/lib/keka/candidates.ts` | **Blocked** — see *The push is blocked* |
+| Sync run recording and health | `src/lib/keka/sync.ts` | Live, recording runs |
+| Scheduled entry point | `src/app/api/cron/keka/route.ts` | Live locally; Vercel cron not yet on |
+| Credential + scope audit | `scripts/keka-verify.mjs` | **Run 21 Sep: passes, least privilege confirmed** |
+| Tenant reconnaissance | `scripts/keka-discover.mjs` | **Run 21 Sep: see the tenant table below** |
+| Mapping tests | `scripts/keka-mapping-check.mjs` | `npm run keka:check` |
+| Schema | `db/0003_keka.sql` | **Applied to Neon** 21 Sep |
+
+### Credentials and how they are protected
+
+Issued by a Keka **Global admin** only: Global admin settings → Integrations &
+Automations → API access → API key. No other admin role can create them, and the key must
+carry the **recruitment scopes** or `/v1/hire/*` answers 403 while the token itself
+succeeds — a confusing failure worth recognising quickly. `npm run keka:verify` names that
+case explicitly rather than leaving you to guess.
+
+Four things enforce the handling, rather than relying on anyone remembering:
+
+- **`src/lib/keka/client.ts` imports `server-only`.** If any client component ever reaches
+  it, the **build fails** instead of bundling the Keka client secret into browser
+  JavaScript. `src/lib/db.ts` carries the same guard now, which CONTEXT.md had asked for
+  in prose since Phase 0. Verified by deliberately importing it from a client component
+  and watching the build refuse.
+- **`npm run env:set` handles the values, not a text editor.** It strips the trailing
+  full stop a secret picks up when copied out of prose (§8), rejects a `KEKA_COMPANY` that
+  is a full host rather than a subdomain, generates `CRON_SECRET`, and writes `.env.local`
+  `0600`.
+- **`npm run keka:verify` audits least privilege.** It probes every Keka module and
+  reports anything the key can read that the Hub never touches — salaries, documents,
+  attendance, performance. A referral tool holding a key that can read payroll widens the
+  blast radius of a leak for no benefit. It prints fingerprints, never secrets.
+- **`CRON_SECRET` is compared in constant time** (`timingSafeEqual`), and the route
+  refuses every request when it is unset rather than defaulting open.
+
+Separate keys per environment: sandbox credentials only work against `*.kekademo.com`,
+production only against `*.keka.com`. Never put a production key in a local `.env.local`.
+Set an expiry when issuing — Keka keys default to never expiring.
+
+```
+KEKA_COMPANY=…        # the subdomain in <company>.keka.com, no protocol
+KEKA_CLIENT_ID=…
+KEKA_CLIENT_SECRET=…
+KEKA_API_KEY=…
+KEKA_ENV=production   # or sandbox, which is *.kekademo.com
+CRON_SECRET=…         # openssl rand -base64 32
+```
+
+Token: `POST https://login.keka.com/connect/token`, form-url-encoded, with
+`grant_type=kekaapi` **and** `scope=kekaapi` — `client_credentials` is not the grant here.
+Tokens last 24 hours. Keka's docs warn that requests without a `User-Agent` are rejected
+from non-browser clients, so the client always sends one.
+
+API base is `https://{company}.keka.com/api`. **Rate limit is 50 requests per minute**,
+429 on breach; the client throttles itself at 45 and honours `Retry-After`.
+
+### What the tenant actually looks like
+
+Measured 21 Sep 2026 with `npm run keka:discover`.
+
+| | |
+| --- | --- |
+| Jobs | **906**, across 5 pages of 200 |
+| Referral-enabled | **364** of 906 |
+| Candidates seen (8-job sample) | 699 |
+| Hiring stages seen | `Sourced`, `Shortlisted` |
+| `sourceTitle` values in use | Career Portal, Indeed Job Posts, **Employee Referral**, Consultant |
+
+Job status distribution — the enum Keka does not publish:
+
+| status | jobs | referral-enabled |
+| --- | --- | --- |
+| 1 | 56 | 56 / 56 |
+| 2 | 817 | 307 / 817 |
+| 3 | 29 | 1 / 29 |
+| 4 | 4 | 0 / 4 |
+
+**Which of these means "open" is still unanswered** and needs someone to open one job of
+each status in the Keka UI. It matters: `keka_open_job_statuses` currently defaults to `1`,
+which would surface 56 roles. Adding `2` would surface 363. CONTEXT.md §2 assumes ~32 open
+roles at a time, so 906 job records is clearly a long history rather than a live pipeline.
+
+Good news on stages: **`jobHiringStageId` is a readable name, not a GUID** — the tenant
+returns `Sourced` and `Shortlisted`. `keka_stage_map` still governs what an employee sees,
+but filling it is a much smaller job than feared.
+
+### Three things the tenant taught us that the documentation got wrong
+
+**Every module sits under `/v1`, not just Hire.** `/hris/employees` is a 404;
+`/v1/hris/employees` is a 403. The documentation's URL slugs omit the prefix for
+everything except recruitment. This matters beyond tidiness: the first version of
+`keka-verify.mjs` probed unprefixed paths, read the resulting 404s as "access denied" and
+printed a **falsely reassuring least-privilege pass**. It now distinguishes 404 (wrong
+path, not checked) from 401/403 (genuinely denied).
+
+**Keka returns dates as Unix epoch seconds in a string** — `"1789573328.01"` — although
+its OpenAPI types them `date-time`, and `publishedOn` is usually `""` rather than absent.
+`new Date("1789573328.01")` is an Invalid Date, so the obvious parse silently stamped
+every synced job with today's date. `parseKekaDate()` in `src/lib/keka/map.ts` handles
+epoch seconds, epoch milliseconds and real ISO strings, and there are regression tests
+pinned to the exact strings the tenant sent.
+
+**But `lastModified` on the way *in* must be ISO 8601.** Epoch seconds are rejected with
+400. Verified: a far-future ISO filter returns 0 of 906, a far-past one returns 906. So
+Keka speaks epoch outbound and ISO inbound, and the watermark sync is correct as written.
+
+Also: `experience` is a free-text string — `"3"`, `"3-5"`, `"10 - 14"`, `"5 years"` —
+and `departmentName` is missing on 126 of 906 jobs.
+
+### The push is blocked
+
+`GET /v1/hire/jobs/{id}/applicationfields` reports **8 required fields** on every job
+sampled:
+
+`firstName`, `lastName`, `email`, `phone`, `workExperience`, **`currentSalary`**,
+**`expectedSalary`**, `availability`
+
+The Hub's referral form collects the first four. It collects none of the last four, so
+**the candidate push as built would be rejected**, and `keka_push_candidates` stays
+`false` until this is resolved.
+
+The salary fields are not merely a missing input. §9 commits this product to DPDP
+minimisation in as many words — *"Name, contact, employer, designation, LinkedIn, résumé.
+Nothing else. No DOB, no salary, no ID documents."* Asking an employee to supply a
+colleague's current and expected salary contradicts that, and referrers frequently do not
+know it and would guess. **Do not solve this by adding salary fields to the referral
+form.** The options are to have Keka mark those fields optional on referral-enabled jobs
+(they are configured per job, so this is HR config rather than code), or to leave the push
+off and have TA work from the Hub's own list.
+
+### Three more things the live sync taught us
+
+**Keka's `orgJobId` is not unique.** 906 jobs use 905 distinct values — `CGJOB764` appears
+twice — but `jobs.req_id` is declared `unique` back in `0001`. The first sync died on
+`jobs_req_id_key` after writing 230 rows. `upsert_keka_jobs` now takes the readable code
+when it is free and appends the Keka id when it is not, and never rewrites `req_id` on
+conflict, so whichever row claimed the bare code keeps it. The raw value lives in
+`jobs.keka_org_job_id`.
+
+**One round trip per job does not work from here.** §4's ~250ms Virginia latency turned
+906 sequential upserts into a >70s sync that would have breached the route's 300s ceiling
+outright on a slower day. The whole page now goes over as one `jsonb` argument and loops
+inside Postgres: **11.7 seconds** for all 906.
+
+**45% of job descriptions open with the same paragraph.** 384 of 860 begin *"Does working
+for 150+ million children of Bharat excite you? … About us: ConveGenius is …"*, so half
+of `/roles` said exactly the same thing and nothing about the job. `stripBoilerplate()`
+skips to the first role heading — `Role Summary`, `About the role`, `Key
+Responsibilities` — but only when the text actually opens with the preamble *and* a
+heading exists later, so a description written the other way round is untouched.
+
+### Rewards are not Keka's to give
+
+Keka has no concept of a referral reward, so every discovered role lands with the
+`keka_default_reward_amount` placeholder. 56 roles all displaying the same invented
+₹10,000 is precisely the failure convention 1 exists to prevent, so `jobs.reward_confirmed`
+gates it: until HR sets a real figure the card reads **"To be confirmed"** rather than a
+number. `rewardLabel()` in `src/lib/format.ts` is the single place that decides this, and
+`/roles` and the refer flow both use it.
+
+Setting the real figures is now the main thing standing between this and a usable
+programme. It is data entry against `jobs.reward_amount` plus `reward_confirmed = true`,
+not code.
+
+### The two things the documentation cannot tell you
+
+These are why `scripts/keka-discover.mjs` exists, and why the integration is not simply
+switched on.
+
+**1. `JobStatus` is an integer with no published enum.** Which values mean "open" is a
+tenant fact. It lives in `app_settings.keka_open_job_statuses` and defaults to `1`.
+The default is deliberately narrow: an unconfirmed status is treated as closed, so the
+failure mode is a role missing from the Hub rather than referrals taken for a role that
+stopped hiring.
+
+**2. There is no endpoint that lists hiring stages.** Candidates carry a
+`jobHiringStageId` and nothing resolves it to a name. `keka_stage_map` is therefore filled
+by observation: the discovery script reports the distinct ids a tenant uses, and a human
+writes the employee-facing wording. **Until a row exists, a stage is stored but never
+shown.** The Hub does not invent a label for a stage it does not recognise — that is
+commitment 1 and convention 1, and it is the difference between this and the prototype.
+
+### Design decisions worth not relitigating
+
+**Keka owns job facts; the Hub owns job money.** The sync overwrites title, department,
+location, experience band, open/closed, summary and posted date. It never writes
+`reward_amount`, `eligibility_days` or `is_priority` — those are programme config
+(convention 2 and 4), and an hourly job that reset them would silently undo HR's work.
+`upsert_keka_job` in `db/0003_keka.sql` enforces this by which columns its `on conflict`
+clause omits. **Do not add them to that list.**
+
+**A role is referable only if Keka says open AND `isReferralEnabled`.** Turning referrals
+off on a job in Keka therefore withdraws it from the Hub, which is what HR expects that
+switch to do.
+
+**The candidate push can never cost an employee their referral.** `submit_referral`
+commits first; the push runs in Next's `after()`, so it adds no latency to the submit and
+cannot fail it. Failures land in `referrals.keka_push_error` and are retried by the
+sweeper on the cron route. A referral is complete and valid having never reached Keka.
+
+**A 400 from the candidate POST is not retried.** It means our body is wrong for that
+tenant's required fields, and an identical retry will fail identically. It is marked
+permanent and left for a human.
+
+**The push is off by default** — `app_settings.keka_push_candidates` is `false` — because
+the per-job required application fields are a tenant fact we have not seen. Turn it on
+only after the discovery script shows the form can satisfy every required field.
+
+**Referrer attribution goes in a candidate note.** Keka documents no referrer field on
+the candidate POST, and custom fields vary per tenant, so the note is the one channel
+guaranteed to exist. Matching Keka candidates back to Hub referrals is by **normalised
+email**, which the Hub already computes; it does not depend on a custom field existing.
+
+**`interviews` and `scorecards` are never synced.** Both endpoints exist. Commitment 2
+says feedback and scores stay in the ATS, and the safest way not to leak data is not to
+hold it. Do not add them.
+
+**Reconcile only runs on a full pull, and refuses an empty response.** A watermarked pull
+cannot see a job deleted in Keka, so a nightly full run closes anything missing. If Keka
+returns zero jobs it throws rather than closing every role in the Hub — an empty list is
+far more likely to be a Keka fault than every role closing at once.
+
+**A failed sync run does not advance the watermark.** `last_sync_watermark()` reads only
+from runs that succeeded, so the next run re-reads the window the failed one missed
+rather than skipping it forever.
+
+### Scheduling
+
+`vercel.json` registers two crons: hourly incremental, and a full run with reconcile at
+02:30. **Vercel's Hobby plan allows daily cron only** — the team is on Hobby (§4), so
+hourly needs Pro. The §11 cost table already budgets $20/month for hosting, so this is a
+planned spend rather than a surprise, but the hourly schedule will not fire until the plan
+changes.
+
+`/api/cron` is exempted in `src/proxy.ts`. Without that the proxy redirects the scheduler
+to `/login` and the sync silently never runs. It authorises on `CRON_SECRET` and **refuses
+every request when that is unset** rather than defaulting open.
+
+### Running it
+
+```bash
+npm run env:set                       # enter the credentials safely
+npm run keka:check                    # mapping tests — no credentials needed
+npm run keka:verify                   # credential works? over-granted? read-only
+npm run keka:discover                 # read-only tenant reconnaissance
+npm run db:apply                      # applies db/0003_keka.sql
+
+# with the dev server running:
+curl -H "authorization: Bearer $CRON_SECRET" \
+     'http://localhost:3000/api/cron/keka?full=1'
+```
+
+Run discovery **before** the first sync. It reports the status values, the referral-enabled
+count, the per-job required application fields and the distinct stage ids — which is
+exactly the input `keka_open_job_statuses` and `keka_stage_map` need.
+
+### Still owed
+
+- **Set the real reward per role** — 56 open roles currently read "To be confirmed"
+- Confirm `keka_open_job_statuses`. It is `1`, giving 56 roles; adding `2` would give 363.
+  `select * from rederive_keka_job_openness();` applies a change with no re-sync
+- Fill `keka_stage_map`, then wire `/referrals` to real stages and **delete
+  `referralJourney` from `src/lib/showcase.ts`** — that timeline is currently invented
+- Confirm the candidate POST body against a real job's required fields, then enable
+  `keka_push_candidates`
+- The stage pull itself: `GET /v1/hire/jobs/{jobId}/candidates` with `lastModified`,
+  writing to `referral_stages`. Candidates are fetched **per job**, so ~32 open roles is
+  ~32 calls per cycle — comfortably inside 50/min, but not something to parallelise
+- HRIS sync for employees, which also settles **D04** (`/hris/noticeperiods` and the exit
+  request endpoints do expose notice period) and **D06** (joining and confirmation dates)
+- Decide whether reward payout uses the payroll API or a file (D05, D13)

@@ -1,9 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { queryOne } from "@/lib/db";
 import { currentEmployee } from "@/lib/employees";
 import { referralSchema, CONSENT_NOTICE } from "@/lib/validation";
+import { tryPushAfterSubmit } from "@/lib/keka/candidates";
 
 export type SubmitState = {
   status: "idle" | "error" | "done";
@@ -85,6 +87,25 @@ export async function submitReferral(
     );
 
     revalidatePath("/referrals");
+
+    // Push the candidate to Keka Hire *after* the response is sent. The
+    // referral is already committed; Keka is an enrichment and must never add
+    // latency to the employee's submit or fail it. Anything that goes wrong is
+    // recorded on the referral row and retried by the sweeper.
+    if (row?.ref_code) {
+      const refCode = row.ref_code;
+      after(async () => {
+        try {
+          const referral = await queryOne<{ id: string }>(
+            `select id from referrals where ref_code = $1`,
+            [refCode],
+          );
+          if (referral) await tryPushAfterSubmit(referral.id);
+        } catch (e) {
+          console.error("keka: could not queue push for", refCode, e);
+        }
+      });
+    }
 
     return {
       status: "done",

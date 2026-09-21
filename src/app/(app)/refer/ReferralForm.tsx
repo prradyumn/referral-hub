@@ -4,7 +4,7 @@ import { useActionState, useMemo, useState } from "react";
 import Link from "next/link";
 import { submitReferral, type SubmitState } from "./actions";
 import { referralSchema, RELATIONSHIPS, CONSENT_NOTICE, formatPhone } from "@/lib/validation";
-import { rupees } from "@/lib/format";
+import { rewardLabel } from "@/lib/format";
 
 export type JobOption = {
   id: string;
@@ -12,6 +12,7 @@ export type JobOption = {
   location: string;
   department: string;
   reward_amount: number;
+  reward_confirmed: boolean;
   eligibility_days: number;
 };
 
@@ -162,7 +163,7 @@ export default function ReferralForm({
                 <option value="">Select a role</option>
                 {jobs.map((j) => (
                   <option key={j.id} value={j.id}>
-                    {j.title} — {j.location} · {rupees(j.reward_amount)}
+                    {j.title} — {j.location} · {rewardLabel(j.reward_amount, j.reward_confirmed)}
                   </option>
                 ))}
               </select>
@@ -298,7 +299,7 @@ export default function ReferralForm({
               <Row k="Role" v={job ? `${job.title} · ${job.location}` : "—"} />
               <Row
                 k="Referral reward if they join"
-                v={job ? rupees(job.reward_amount) : "—"}
+                v={job ? rewardLabel(job.reward_amount, job.reward_confirmed) : "—"}
                 strong
               />
             </dl>

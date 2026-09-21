@@ -9,7 +9,10 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "db:apply": "node --env-file=.env.local scripts/apply-schema.mjs",
-    "env:set": "node scripts/set-secrets.mjs"
+    "env:set": "node scripts/set-secrets.mjs",
+    "keka:check": "node scripts/keka-mapping-check.mjs",
+    "keka:verify": "node --env-file=.env.local scripts/keka-verify.mjs",
+    "keka:discover": "node --env-file=.env.local scripts/keka-discover.mjs"
   },
   "dependencies": {
     "next": "^16.3.5",
@@ -17,6 +20,7 @@
     "pg": "^8.23.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
+    "server-only": "^0.0.1",
     "zod": "^3.25.76"
   },
   "devDependencies": {

@@ -1,3 +1,8 @@
+// CONTEXT.md has warned since Phase 0 that this module is Node-runtime only
+// and must never be imported by a client component. This makes that a build
+// error rather than a note: DATABASE_URL contains the database password.
+import "server-only";
+
 import { Pool } from "pg";
 
 // Vercel runs each function in its own short-lived process, so a large pool per

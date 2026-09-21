@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { query } from "@/lib/db";
 import { requireSignedInUser } from "@/lib/employees";
-import { rupees } from "@/lib/format";
+import { rewardLabel } from "@/lib/format";
 import { Card, PageHead } from "@/components/Chrome";
 
 type Job = {
@@ -13,6 +13,7 @@ type Job = {
   experience_band: string;
   is_priority: boolean;
   reward_amount: number;
+  reward_confirmed: boolean;
   summary: string | null;
 };
 
@@ -32,7 +33,7 @@ export default async function RolesPage({
   try {
     all = await query<Job>(
       `select id, req_id, title, department, location, experience_band,
-              is_priority, reward_amount, summary
+              is_priority, reward_amount, reward_confirmed, summary
          from public.jobs
         where is_open
         order by is_priority desc, posted_on desc`,
@@ -179,8 +180,14 @@ export default async function RolesPage({
 
               <div className="mt-auto flex items-center justify-between rounded-md bg-[var(--color-gold-soft)] px-3 py-2 pt-2">
                 <span className="text-[13px] text-[var(--color-ink-2)]">Referral reward</span>
-                <span className="text-[15px] font-semibold text-[var(--color-gold)]">
-                  {rupees(job.reward_amount)}
+                <span
+                  className={
+                    job.reward_confirmed
+                      ? "text-[15px] font-semibold text-[var(--color-gold)]"
+                      : "text-[13px] font-medium text-[var(--color-ink-3)]"
+                  }
+                >
+                  {rewardLabel(job.reward_amount, job.reward_confirmed)}
                 </span>
               </div>
 
