@@ -1472,6 +1472,22 @@ including the things that matter later. Acknowledgement is recorded in
 `employees.welcome_ack_at` rather than localStorage, so it survives a different
 device and does not vanish with cleared site data.
 
+The showcase **flips** through the gifts biggest-first — Harley, smartphone, smartwatch
+— on the reasoning that the Harley is what makes somebody look twice while the smartwatch
+is what makes the programme feel achievable. Underneath it a **board** lists all three at
+once plus the cash line, so nobody has to wait for the carousel to come round to read the
+thing they care about: the motion is for attention, the board is for information. The
+primary button goes straight to `/roles`.
+
+Closing does **not** wait on the acknowledgement. Recording it round-trips to Neon in
+Virginia and revalidates the layout — roughly two seconds from here (§4) — and waiting on
+that meant clicking the button and watching nothing happen. The dialog closes and
+navigates first; the bookkeeping follows.
+
+`useReducedMotion()` uses `useSyncExternalStore`, not `useState` in an effect. React's
+lint rule caught the effect version, and §8 already records it being right about this
+twice.
+
 **The artwork is SVG, not generated images.** A raster watch cannot rotate and
 raster cash cannot fall, so animating pictures would mean sliding flat images
 around. `src/components/RewardArt.tsx` holds five pieces — falling rupee notes
