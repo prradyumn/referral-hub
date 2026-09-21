@@ -50,6 +50,7 @@ export async function saveSetting(
 
   revalidatePath("/admin/settings");
   revalidatePath("/roles");
+  revalidatePath("/home");
   revalidatePath("/leaderboard");
   revalidatePath("/home");
   return { status: "ok", message: `Saved.${extra}` };

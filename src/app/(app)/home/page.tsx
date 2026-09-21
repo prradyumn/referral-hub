@@ -5,6 +5,30 @@ import {
 } from "@/lib/rewards";
 import { rupees, shortDate, initials } from "@/lib/format";
 import { Card, PageHead, QuietLink, StatGroup } from "@/components/Chrome";
+import WelcomeGate, { type Tier } from "@/components/WelcomeGate";
+
+/**
+ * Should the programme poster show?
+ *
+ * `every_visit` — the configured default — means exactly that: it appears on
+ * every arrival at Home. `once` falls back to the acknowledgement on the
+ * employee row. Which of the two applies is HR's call, not the component's,
+ * so it lives in app_settings (convention 2).
+ */
+async function posterFor(employeeId: string, ackAt: string | null) {
+  const [mode] = await query<{ value: string }>(
+    `select value from app_settings where key = 'welcome_poster_mode'`,
+  );
+  const everyVisit = (mode?.value ?? "every_visit").trim() !== "once";
+  if (!everyVisit && ackAt !== null) return null;
+
+  const tiers = await query<Tier>(
+    `select name, threshold, blurb from milestone_tiers
+      where is_active order by sort_order, threshold`,
+  );
+  void employeeId;
+  return tiers.length ? tiers : null;
+}
 
 /** The most recent thing that actually happened to one of your referrals. */
 async function latestUpdate(employeeId: string) {
@@ -51,11 +75,12 @@ export default async function HomePage() {
     );
   }
 
-  const [totals, milestones, latest, boardOn] = await Promise.all([
+  const [totals, milestones, latest, boardOn, posterTiers] = await Promise.all([
     rewardTotals(employee.id),
     milestoneProgress(employee.id),
     latestUpdate(employee.id),
     leaderboardEnabled(),
+    posterFor(employee.id, employee.welcome_ack_at),
   ]);
   const top3 = boardOn ? await leaderboard("monthly", 3) : [];
 
@@ -64,6 +89,8 @@ export default async function HomePage() {
 
   return (
     <>
+      {posterTiers && <WelcomeGate tiers={posterTiers} />}
+
       <PageHead title={title} lede="Where your referrals have reached, and what they are worth." />
 
       <h2 className="mb-3 text-[13px] font-medium tracking-wide text-[var(--color-ink-3)] uppercase">

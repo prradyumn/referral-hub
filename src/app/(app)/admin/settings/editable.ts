@@ -22,6 +22,20 @@ type Editable = {
 
 export const EDITABLE: Editable[] = [
   {
+    key: "welcome_poster_mode",
+    label: "How often the programme poster appears",
+    help:
+      "every_visit — it opens every time someone lands on Home. once — it " +
+      "stops once they have acknowledged it. Every visit reaches everybody, " +
+      "and is also the thing people learn to click past fastest; which " +
+      "trade-off is right is a call for HR.",
+    kind: "text",
+    validate: (v) =>
+      ["every_visit", "once"].includes(v.trim())
+        ? null
+        : 'Use exactly "every_visit" or "once".',
+  },
+  {
     key: "leaderboard_enabled",
     label: "Show the leaderboard to employees",
     help:

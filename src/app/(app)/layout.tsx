@@ -3,8 +3,6 @@ import { signOut } from "@/auth";
 import { currentEmployee, requireSignedInUser } from "@/lib/employees";
 import { isAdmin } from "@/lib/admin";
 import { initials } from "@/lib/format";
-import WelcomeGate, { type Tier } from "@/components/WelcomeGate";
-import { query } from "@/lib/db";
 import { Wordmark } from "@/components/Logo";
 
 const NAV = [
@@ -31,26 +29,19 @@ export default async function AppLayout({
   // permission: requireAdmin() in src/lib/admin.ts is what actually guards
   // those routes. This just avoids showing a door that will not open.
   // Failing closed keeps the header rendering when the database is down.
+  // The admin link is hidden from everyone else, but hiding a link is not a
+  // permission: requireAdmin() in src/lib/admin.ts is what actually guards
+  // those routes. This just avoids showing a door that will not open.
+  // Failing closed keeps the header rendering when the database is down.
+  //
+  // The programme poster lives on /home, not here — it is a thing you meet
+  // when you arrive, not on every page.
   let showAdmin = false;
-  // The poster is mandatory but shown once, so whether to show it is a
-  // property of the employee, not of the browser.
-  let showWelcome = false;
-  let tiers: Tier[] = [];
   try {
     const employee = await currentEmployee();
     showAdmin = employee ? await isAdmin(employee.email) : false;
-    showWelcome = Boolean(employee) && employee?.welcome_ack_at == null;
-    if (showWelcome) {
-      tiers = await query<Tier>(
-        `select name, threshold, blurb from milestone_tiers
-          where is_active order by sort_order, threshold`,
-      );
-    }
   } catch {
-    // Database unreachable. Fail closed on admin, and do not wall someone out
-    // of the app behind a poster we cannot record them having read.
     showAdmin = false;
-    showWelcome = false;
   }
 
   return (
@@ -109,7 +100,6 @@ export default async function AppLayout({
 
       <main className="mx-auto max-w-6xl px-5 py-8">{children}</main>
 
-      {showWelcome && <WelcomeGate tiers={tiers} />}
     </div>
   );
 }
