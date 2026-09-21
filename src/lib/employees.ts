@@ -8,6 +8,8 @@ export type Employee = {
   full_name: string | null;
   department: string | null;
   location: string | null;
+  /** Null until they have read the programme poster. */
+  welcome_ack_at: string | null;
 };
 
 export type SignedInUser = { email: string; name: string };
@@ -48,7 +50,7 @@ export async function currentEmployee(): Promise<Employee | null> {
        values ($1, nullif($2, ''))
        on conflict (email) do update
          set full_name = coalesce(employees.full_name, excluded.full_name)
-       returning id, email, full_name, department, location`,
+       returning id, email, full_name, department, location, welcome_ack_at`,
       [user.email, user.name],
     );
   } catch {

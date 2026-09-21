@@ -27,11 +27,24 @@ function getPool(): Pool {
   }
 
   const pool = new Pool({
-    connectionString,
+    // Neon presents a valid certificate, so the connection is fully verified.
+    //
+    // This used to pass `ssl: { rejectUnauthorized: false }`, which encrypts
+    // the connection but accepts any certificate — no protection against an
+    // interception. Verified on 21 Sep 2026 that Neon works with full
+    // verification, so there was nothing being bought by turning it off.
+    //
+    // `sslmode=require` is rewritten to `verify-full` because pg treats them
+    // as the same today and warns that a future major version will not: under
+    // libpq semantics `require` encrypts without verifying. Saying what we
+    // mean now keeps the behaviour when that changes.
+    connectionString: connectionString.replace(
+      /([?&])sslmode=(require|prefer|verify-ca)\b/gi,
+      "$1sslmode=verify-full",
+    ),
     max: 3,
     idleTimeoutMillis: 10_000,
     connectionTimeoutMillis: 10_000,
-    ssl: { rejectUnauthorized: false },
   });
 
   globalThis.__referralHubPool = pool;

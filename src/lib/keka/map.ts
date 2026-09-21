@@ -118,23 +118,52 @@ const ROLE_SECTION_MARKERS = [
  * left alone.
  */
 export function stripBoilerplate(text: string): string {
-  const head = text.slice(0, 400).toLowerCase();
+  let body = text;
+
+  // A leading heading goes whether or not there was any preamble in front of
+  // it. Plenty of descriptions open straight with "Role Summary …", and the
+  // label is shelf-space either way.
+  const dropLeadingHeading = (t: string): string => {
+    const lower = t.toLowerCase();
+    for (const marker of ROLE_SECTION_MARKERS) {
+      if (lower.startsWith(marker)) {
+        return t.slice(marker.length).replace(/^\s*[:\u2013\u2014-]?\s*/, "").trim();
+      }
+    }
+    return t;
+  };
+
+  const head = body.slice(0, 400).toLowerCase();
   const opensWithBoilerplate =
     /does working for|about us\s*:|about the (company|organisation|organization)\s*:/.test(head);
-  if (!opensWithBoilerplate) return text;
 
-  const lower = text.toLowerCase();
-  let best = -1;
-  for (const marker of ROLE_SECTION_MARKERS) {
-    const at = lower.indexOf(marker);
-    // Must come after the preamble, and leave something worth showing.
-    // Must sit after the preamble, and leave a real sentence behind — a
-    // description ending on the word "Responsibilities" must not be cut to
-    // nothing.
-    if (at > 40 && text.length - at > 40 && (best === -1 || at < best)) best = at;
+  if (opensWithBoilerplate) {
+    const lower = body.toLowerCase();
+    let best = -1;
+    for (const marker of ROLE_SECTION_MARKERS) {
+      const at = lower.indexOf(marker);
+      // Must sit after the preamble, and leave a real sentence behind — a
+      // description ending on the word "Responsibilities" must not be cut to
+      // nothing.
+      if (at > 40 && body.length - at > 40 && (best === -1 || at < best)) best = at;
+    }
+    if (best === -1) {
+      // No heading to jump to. Rather than return nothing, drop the pure
+      // filler — the rhetorical opener carries no information at all, while
+      // the "About us" sentence at least says what the company does. Three of
+      // the tenant's 56 open roles are written this way.
+      return body
+        .replace(/^\s*does working for[^.!?]*[.!?]\s*/i, "")
+        .replace(/^\s*then this (is the )?opportunity[^.!?]*[.!?]\s*/i, "")
+        .trim() || body;
+    }
+    body = body.slice(best).trim();
   }
 
-  return best === -1 ? text : text.slice(best).trim();
+  // Twice, because "Role Summary Key Responsibilities …" strands the second.
+  body = dropLeadingHeading(dropLeadingHeading(body));
+
+  return body ? body.charAt(0).toUpperCase() + body.slice(1) : text;
 }
 
 /**

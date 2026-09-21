@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { signOut } from "@/auth";
-import { requireSignedInUser } from "@/lib/employees";
+import { currentEmployee, requireSignedInUser } from "@/lib/employees";
 import { isAdmin } from "@/lib/admin";
 import { initials } from "@/lib/format";
-import WelcomeDialog from "@/components/WelcomeDialog";
-import Logo from "@/components/Logo";
+import WelcomeGate, { type Tier } from "@/components/WelcomeGate";
+import { query } from "@/lib/db";
+import { Wordmark } from "@/components/Logo";
 
 const NAV = [
   { href: "/home", label: "Home" },
@@ -31,22 +32,43 @@ export default async function AppLayout({
   // those routes. This just avoids showing a door that will not open.
   // Failing closed keeps the header rendering when the database is down.
   let showAdmin = false;
+  // The poster is mandatory but shown once, so whether to show it is a
+  // property of the employee, not of the browser.
+  let showWelcome = false;
+  let tiers: Tier[] = [];
   try {
-    showAdmin = await isAdmin(user.email);
+    const employee = await currentEmployee();
+    showAdmin = employee ? await isAdmin(employee.email) : false;
+    showWelcome = Boolean(employee) && employee?.welcome_ack_at == null;
+    if (showWelcome) {
+      tiers = await query<Tier>(
+        `select name, threshold, blurb from milestone_tiers
+          where is_active order by sort_order, threshold`,
+      );
+    }
   } catch {
+    // Database unreachable. Fail closed on admin, and do not wall someone out
+    // of the app behind a poster we cannot record them having read.
     showAdmin = false;
+    showWelcome = false;
   }
 
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-30 border-b border-[var(--color-line)] bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-5 gap-y-3 px-5 py-3">
-          <Link href="/home" className="flex items-center gap-2.5">
-            <Logo className="h-7 w-7" />
-            <span className="text-[15px] font-semibold tracking-tight">Referral Hub</span>
+          <Link
+            href="/home"
+            className="shrink-0 rounded-md focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--color-brand)]"
+            aria-label="ConveGenius Referral Hub — home"
+          >
+            <Wordmark />
           </Link>
 
-          <nav className="-mx-1 flex flex-1 items-center gap-0.5 overflow-x-auto px-1">
+          {/* On mobile the nav takes its own full-width row underneath the
+              logo and scrolls horizontally; squeezing it onto the first row
+              truncated the labels to single letters. */}
+          <nav className="-mx-1 order-last flex w-full items-center gap-0.5 overflow-x-auto px-1 sm:order-none sm:w-auto sm:flex-1">
             {[...NAV, ...(showAdmin ? ADMIN_NAV : [])].map((item) => (
               <Link
                 key={item.href}
@@ -87,7 +109,7 @@ export default async function AppLayout({
 
       <main className="mx-auto max-w-6xl px-5 py-8">{children}</main>
 
-      <WelcomeDialog />
+      {showWelcome && <WelcomeGate tiers={tiers} />}
     </div>
   );
 }

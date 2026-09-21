@@ -123,18 +123,49 @@ check("real tenant preamble is dropped at the role heading", () => {
     "scale. Role Summary We are looking for a DevOps Lead to own our deployment " +
     "pipeline and cloud infrastructure end to end.";
   const out = stripBoilerplate(real);
-  assert.ok(out.startsWith("Role Summary"), out.slice(0, 60));
+  // The heading is an anchor for finding the content, not content itself —
+  // it is consumed along with the preamble.
+  assert.ok(out.startsWith("We are looking for"), out.slice(0, 60));
   assert.ok(!out.includes("About us"), "boilerplate survived");
+  assert.ok(!/role summary/i.test(out), "heading survived");
 });
-check("a description with no preamble is untouched", () => {
+check("the heading itself is stripped, not just the preamble", () => {
+  const real =
+    "Does working for 150+ million children of Bharat excite you? About us: " +
+    "ConveGenius is an impact-first organisation working at population scale. " +
+    "Key Responsibilities: Lead the design and execution of large-scale education " +
+    "programmes with state governments.";
+  const out = stripBoilerplate(real);
+  assert.ok(out.startsWith("Lead the design"), out.slice(0, 70));
+  assert.ok(!/key responsibilities/i.test(out), "heading survived");
+});
+check("two stacked headings both go", () => {
+  const real =
+    "Does working for 150+ million children of Bharat excite you? About us: we " +
+    "build education infrastructure at population scale across many states. " +
+    "Role Summary Key Responsibilities Own the release pipeline end to end.";
+  const out = stripBoilerplate(real);
+  assert.ok(out.startsWith("Own the release"), out.slice(0, 70));
+});
+check("a leading heading goes even with no preamble in front of it", () => {
+  // The real "Data Engineer" description in the tenant: no About-us block,
+  // just the heading. It survived the first version of this function.
   const clean = "Role Summary We are looking for a skilled Data Engineer to design and build.";
-  assert.equal(stripBoilerplate(clean), clean);
+  const out = stripBoilerplate(clean);
+  assert.equal(out, "We are looking for a skilled Data Engineer to design and build.");
 });
-check("preamble with no role heading is left alone, not emptied", () => {
+check("body text with no heading at all is untouched", () => {
+  const plain = "Design, develop and implement secure and scalable cloud infrastructure.";
+  assert.equal(stripBoilerplate(plain), plain);
+});
+check("preamble with no role heading loses the filler, not the substance", () => {
   const noHeading =
     "Does working for 150+ million children of Bharat excite you? About us: " +
     "ConveGenius builds education infrastructure across India and beyond.";
-  assert.equal(stripBoilerplate(noHeading), noHeading);
+  const out = stripBoilerplate(noHeading);
+  assert.ok(out.startsWith("About us"), out.slice(0, 50));
+  assert.ok(!/does working for/i.test(out), "filler survived");
+  assert.ok(out.includes("education infrastructure"), "substance was lost");
 });
 check("summaryText applies it end to end", () => {
   const html =
@@ -142,7 +173,8 @@ check("summaryText applies it end to end", () => {
     "ConveGenius is an impact-first organisation working at population scale.</p>" +
     "<p>Key Responsibilities Own the release pipeline and the on-call rota.</p>";
   const out = summaryText(html);
-  assert.ok(out.startsWith("Key Responsibilities"), out.slice(0, 60));
+  assert.ok(out.startsWith("Own the release"), out.slice(0, 60));
+  assert.ok(!/key responsibilities/i.test(out), "heading survived");
 });
 
 console.log("\nposted date");

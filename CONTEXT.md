@@ -1420,3 +1420,79 @@ Two details worth keeping:
 `EDITABLE` lives in `editable.ts` rather than `actions.ts` because a `"use server"`
 module may only export async functions; exporting the array from there fails the build
 with *"Failed to collect configuration"*.
+
+---
+
+## 21. The roles page and the programme poster
+
+UI work, 21 September 2026.
+
+### Role cards
+
+The job title was 16.5px and the department, location and experience ran
+together as one grey string — on a page whose whole job is scanning 56 roles, the
+thing people scan for was the least prominent element on the card.
+
+`src/components/RoleCard.tsx` now leads with a 19px title, gives each role a
+**department mark** (two initials on a colour derived from the department name, so
+the same team is always the same colour with no mapping to maintain), and splits
+location and experience into separately iconed facts. Posted date and requisition
+id sit quietly at the foot.
+
+The reward treatment is deliberate: a **confirmed** figure is 17px gold, because it
+is the point of the card. An **unset** one is small grey text, because it is the
+absence of a number and a gold box drew the eye to nothing.
+
+Description quality was the bigger win. `stripBoilerplate()` now also removes the
+section heading it uses as an anchor, so cards read *"Lead the design and execution
+of…"* rather than *"Key Responsibilities: Lead the design and execution of…"*, and
+it handles a heading with no preamble in front of it — the shape a third of this
+tenant's descriptions use. Of 56 open roles, **0 now lead with boilerplate or a
+heading**, down from roughly half.
+
+### The header lockup
+
+Two lines — "CONVEGENIUS" small above "Referral Hub" — because running the company
+and the product together as one 15px string made neither legible. Below `sm` the
+wordmark hides and the mark carries the brand alone: the larger lockup had squeezed
+the nav down to "Home  O", which is the logo winning a fight against the thing
+people actually navigate with. The nav drops to its own full-width scrolling row on
+mobile.
+
+### The programme poster
+
+`src/components/WelcomeGate.tsx`, replacing `WelcomeDialog`. Shown once, before an
+employee reaches the app, and **mandatory** in the sense the brief asked for:
+Escape and click-outside are both refused, and the acknowledge button is the only
+way out.
+
+Once, though — not every visit. A wall that reappears stops being read after the
+second time and trains people to click past whatever the Hub puts in front of them,
+including the things that matter later. Acknowledgement is recorded in
+`employees.welcome_ack_at` rather than localStorage, so it survives a different
+device and does not vanish with cleared site data.
+
+**The artwork is SVG, not generated images.** A raster watch cannot rotate and
+raster cash cannot fall, so animating pictures would mean sliding flat images
+around. `src/components/RewardArt.tsx` holds five pieces — falling rupee notes
+behind the hero, a stacking coin pile, a watch that turns, a phone that sways, and
+a motorcycle that rides in with its wheels spinning. All CSS transforms and
+opacity, no JavaScript loop, a few KB, and coloured from the brand tokens.
+
+The motorcycle took three attempts. Line art with two large spoked wheels reads as
+a **bicycle** at 64px however much detail is added; it is wheel-to-body mass the eye
+uses, not exhaust pipes. It is now a solid silhouette with the body heavier than the
+wheels.
+
+**Every animation is disabled under `prefers-reduced-motion`**, and the poster still
+renders complete and readable — verified with Playwright's `reducedMotion: "reduce"`.
+Spinning and falling things are precisely what that setting exists to stop.
+
+### Database TLS, fixed in passing
+
+The Next dev overlay's "1 Issue" badge turned out to be pg warning that `sslmode=require`
+will stop meaning `verify-full` in a future major version. Following it up found
+`src/lib/db.ts` passing `ssl: { rejectUnauthorized: false }` — encrypting the connection
+but accepting any certificate, so no protection against interception. Neon presents a
+valid certificate and was verified to work with full verification, so nothing was being
+bought by having it off. Now `verify-full`, and the warning is gone.

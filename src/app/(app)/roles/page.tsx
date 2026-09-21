@@ -1,21 +1,10 @@
 import Link from "next/link";
 import { query } from "@/lib/db";
 import { requireSignedInUser } from "@/lib/employees";
-import { rewardLabel } from "@/lib/format";
 import { Card, PageHead } from "@/components/Chrome";
+import RoleCard, { type RoleCardJob } from "@/components/RoleCard";
 
-type Job = {
-  id: string;
-  req_id: string;
-  title: string;
-  department: string;
-  location: string;
-  experience_band: string;
-  is_priority: boolean;
-  reward_amount: number;
-  reward_confirmed: boolean;
-  summary: string | null;
-};
+type Job = RoleCardJob;
 
 type Search = { q?: string; dept?: string; loc?: string; priority?: string };
 
@@ -33,10 +22,10 @@ export default async function RolesPage({
   try {
     all = await query<Job>(
       `select id, req_id, title, department, location, experience_band,
-              is_priority, reward_amount, reward_confirmed, summary
+              is_priority, reward_amount, reward_confirmed, summary, posted_on
          from public.jobs
         where is_open
-        order by is_priority desc, posted_on desc`,
+        order by is_priority desc, posted_on desc nulls last`,
     );
   } catch {
     // No database yet. Show the empty state rather than failing the page.
@@ -58,9 +47,15 @@ export default async function RolesPage({
       .includes(q);
   });
 
+  const priorityCount = jobs.filter((j) => j.is_priority).length;
+  const hasFilters = Boolean(sp.q || sp.dept || sp.loc || sp.priority);
+
   return (
     <>
-      <PageHead title="Open roles" lede="Find someone you would want to work with." />
+      <PageHead
+        title="Open roles"
+        lede="Find someone you would want to work with. Every role here is one Keka has referrals open on."
+      />
 
       {error && (
         <Card className="mb-6 border-dashed">
@@ -144,57 +139,41 @@ export default async function RolesPage({
         </Link>
       </form>
 
-      <p className="mb-3 text-[13px] text-[var(--color-ink-3)]">
-        {jobs.length} of {all.length} roles
-      </p>
+      <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+        <p className="text-[14px] text-[var(--color-ink-2)]">
+          <strong className="font-semibold text-[var(--color-ink)]">
+            {jobs.length} {jobs.length === 1 ? "role" : "roles"}
+          </strong>
+          {jobs.length !== all.length && (
+            <span className="text-[var(--color-ink-3)]"> of {all.length}</span>
+          )}
+          {priorityCount > 0 && (
+            <span className="text-[var(--color-ink-3)]">
+              {" "}· {priorityCount} marked priority
+            </span>
+          )}
+        </p>
+        {hasFilters && (
+          <Link href="/roles" className="text-[13px] text-[var(--color-brand)] hover:underline">
+            Clear filters
+          </Link>
+        )}
+      </div>
 
       {jobs.length === 0 ? (
-        <div className="card p-10 text-center">
-          <p className="text-[16px] font-medium">No roles match those filters</p>
-          <p className="mt-1 text-[14px] text-[var(--color-ink-3)]">
-            Clear a filter to see more openings.
+        <div className="card p-12 text-center">
+          <p className="text-[17px] font-medium">No roles match those filters</p>
+          <p className="mx-auto mt-2 max-w-[42ch] text-[14.5px] leading-relaxed text-[var(--color-ink-3)]">
+            {all.length === 0
+              ? "No roles have referrals enabled in Keka yet. Talent Acquisition turns that on per role."
+              : `There are ${all.length} open roles in total — widen a filter to see them.`}
           </p>
+          <Link href="/roles" className="btn-primary mt-6">Show every role</Link>
         </div>
       ) : (
-        <ul className="grid gap-3 sm:grid-cols-2">
+        <ul className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-3">
           {jobs.map((job) => (
-            <li key={job.id} className="card flex flex-col p-5">
-              <div className="mb-1 flex items-start justify-between gap-3">
-                <h2 className="text-[16.5px] font-semibold leading-snug">{job.title}</h2>
-                {job.is_priority && (
-                  <span className="pill shrink-0 bg-[var(--color-gold-soft)] text-[var(--color-gold)]">
-                    Priority
-                  </span>
-                )}
-              </div>
-
-              <p className="text-[13px] text-[var(--color-ink-3)]">
-                {job.department} · {job.location} · {job.experience_band}
-              </p>
-
-              {job.summary && (
-                <p className="mt-3 mb-4 line-clamp-3 text-[14px] leading-relaxed text-[var(--color-ink-2)]">
-                  {job.summary}
-                </p>
-              )}
-
-              <div className="mt-auto flex items-center justify-between rounded-md bg-[var(--color-gold-soft)] px-3 py-2 pt-2">
-                <span className="text-[13px] text-[var(--color-ink-2)]">Referral reward</span>
-                <span
-                  className={
-                    job.reward_confirmed
-                      ? "text-[15px] font-semibold text-[var(--color-gold)]"
-                      : "text-[13px] font-medium text-[var(--color-ink-3)]"
-                  }
-                >
-                  {rewardLabel(job.reward_amount, job.reward_confirmed)}
-                </span>
-              </div>
-
-              <Link href={`/refer?job=${job.id}`} className="btn-primary mt-4 w-full">
-                Refer someone
-              </Link>
-            </li>
+            <RoleCard key={job.id} job={job} />
           ))}
         </ul>
       )}
