@@ -1351,7 +1351,7 @@ automating it would be exactly the prototype's mistake.
   a programme that ranked volume over judgement would fill the pipeline with noise.
 - **The leaderboard is off by default** (`leaderboard_enabled`). §12 treats publicly
   ranking colleagues as a culture decision for HR, not an engineering default. It works;
-  it is simply not shown until someone turns it on.
+  it is simply not shown until an admin turns it on at `/admin/settings`.
 - **The earliest `Hired` stage wins** as the joining date, so a later correction in Keka
   cannot push an employee's qualifying clock backwards.
 
@@ -1385,3 +1385,38 @@ ladder, so the two cannot drift.
 | `npm run e2e:stages` | 15 — stage matching, idempotency, unmapped stages |
 | `npm run e2e:admin` | 13 — admin routes and the predicate |
 | `npm run keka:check` | 52 — the Keka ↔ Hub mapping |
+
+---
+
+## 20. Programme settings
+
+`/admin/settings`, added 21 September 2026.
+
+Convention 2 says configuration lives in data. That was true from Phase 0 — but only in
+the sense that the values sat in `app_settings` where nobody without a psql prompt could
+reach them. The switched-off leaderboard made the gap obvious: the page told the reader
+to set `leaderboard_enabled` to `true`, which is useless advice to the only people who
+would ever act on it. **Configuration in data is not configuration anybody can change
+until there is a screen.**
+
+The page is a **whitelist**, not a free-text editor over `app_settings`. Each entry
+carries its own validation and an explanation of what the setting is for, including the
+tenant evidence where there is any — the Keka job-status field quotes the real
+distribution so whoever changes it is choosing between known numbers rather than
+guessing.
+
+Two details worth keeping:
+
+- **`keka_open_job_statuses` re-derives on save.** Changing it calls
+  `rederive_keka_job_openness()` in the same action, so the new answer applies to all 906
+  synced roles immediately and the result is reported back ("56 roles now open, 850
+  closed"). Without that the change would only reach roles the next sync happened to
+  touch.
+- **`allowed_email_domain` is deliberately absent.** It gates who can sign in and is
+  enforced twice — in the `signIn` callback and again by a database trigger. Changing it
+  in one place and not the other locks everybody out, so it stays a deliberate two-step
+  change. The page says so rather than leaving someone to wonder.
+
+`EDITABLE` lives in `editable.ts` rather than `actions.ts` because a `"use server"`
+module may only export async functions; exporting the array from there fails the build
+with *"Failed to collect configuration"*.

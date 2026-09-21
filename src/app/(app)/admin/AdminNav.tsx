@@ -4,6 +4,7 @@ const TABS = [
   { href: "/admin/rewards", label: "Rewards" },
   { href: "/admin/pipeline", label: "Reward pipeline" },
   { href: "/admin/sync", label: "Integration health" },
+  { href: "/admin/settings", label: "Settings" },
 ];
 
 /** Sub-navigation for the admin screens, so the main header stays one item. */

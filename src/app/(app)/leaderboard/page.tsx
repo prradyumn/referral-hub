@@ -7,6 +7,8 @@ import {
   leaderboardEnabled,
   type LeaderboardPeriod,
 } from "@/lib/rewards";
+import { isAdmin } from "@/lib/admin";
+import { currentEmployee } from "@/lib/employees";
 import { PageHead, Card } from "@/components/Chrome";
 
 const MEDAL = ["var(--color-gold)", "#8a8f9c", "#a9702f"];
@@ -26,6 +28,12 @@ export default async function LeaderboardPage({
   // decision for HR, not a default the engineering team picks.
   const enabled = await leaderboardEnabled();
   if (!enabled) {
+    // Tell an admin where the switch actually is. The previous version named
+    // the setting and left it at that, which is useless to anyone without
+    // database access — and everyone who can turn it on reads this page.
+    const me = await currentEmployee();
+    const admin = me ? await isAdmin(me.email) : false;
+
     return (
       <>
         <PageHead title="Leaderboard" lede="Who has brought the most people in." />
@@ -34,12 +42,22 @@ export default async function LeaderboardPage({
             <strong className="font-semibold text-[var(--color-ink)]">
               The leaderboard is switched off.
             </strong>{" "}
-            Ranking colleagues publicly is a decision for HR rather than a default, so it
-            stays off until someone turns it on. It works and runs on real referral data —
-            set <code className="rounded bg-[var(--color-ground)] px-1.5 py-0.5 text-[13px]">
-            leaderboard_enabled</code> to <code className="rounded bg-[var(--color-ground)] px-1.5 py-0.5 text-[13px]">true</code>{" "}
-            in programme settings to show it.
+            Ranking colleagues publicly is a decision for HR rather than something
+            engineering should default to, so it stays off until someone turns it on. It
+            works, and it runs on real referral data.
           </p>
+
+          {admin ? (
+            <p className="mt-4">
+              <Link href="/admin/settings" className="btn-primary">
+                Turn it on in settings
+              </Link>
+            </p>
+          ) : (
+            <p className="mt-3 text-[13px] text-[var(--color-ink-3)]">
+              Ask HR if you think it should be on.
+            </p>
+          )}
         </Card>
       </>
     );
