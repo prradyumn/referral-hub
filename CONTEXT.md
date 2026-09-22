@@ -1488,7 +1488,30 @@ navigates first; the bookkeeping follows.
 lint rule caught the effect version, and §8 already records it being right about this
 twice.
 
-**The artwork is SVG, not generated images.** A raster watch cannot rotate and
+### The gift photographs
+
+`public/rewards/{harley,smartphone,smartwatch}.webp` — real product shots supplied
+21 Sep 2026, processed with `sharp` and reduced from **1.7 MB to 168 KB**.
+
+They arrived on three different backgrounds: the Harley on a dark studio gradient, the
+watch and phone on white. Dropped onto one surface that reads as mismatched pasted
+rectangles, so the white two were **keyed out** and all three sit on a near-black stage —
+the surface the Harley was already shot for.
+
+The keying is a **flood fill from the border**, not a global "white becomes transparent"
+threshold. A threshold punches holes through the product itself: the watch hands and the
+bright part of the phone screen are both near-white. Only actual background is connected
+to the edge.
+
+The photos are matched to tiers **on threshold, not on name**, because the names are HR's
+to edit in `milestone_tiers` and a rename should not silently drop the artwork. A tier
+with no photo falls back to the drawn SVG mark.
+
+The originals are not in the repo — they came from the Desktop and the processing script
+is in the scratchpad rather than committed, because it is a one-off. Re-cropping needs
+the source files again.
+
+**The supporting artwork is SVG, not generated images.** A raster watch cannot rotate and
 raster cash cannot fall, so animating pictures would mean sliding flat images
 around. `src/components/RewardArt.tsx` holds five pieces — falling rupee notes
 behind the hero, a stacking coin pile, a watch that turns, a phone that sways, and

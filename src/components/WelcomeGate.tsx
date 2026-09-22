@@ -7,6 +7,19 @@ import { CashRain, CoinStackArt, WatchArt, PhoneArt, BikeArt } from "@/component
 
 export type Tier = { name: string; threshold: number; blurb: string | null };
 
+/**
+ * The product photograph for each tier.
+ *
+ * Matched on threshold rather than on name, because the names are HR's to
+ * edit in milestone_tiers and a rename should not silently drop the artwork.
+ * Anything without a photo falls back to the drawn mark.
+ */
+const PHOTO: Record<number, { src: string; w: number; h: number; alt: string }> = {
+  1: { src: "/rewards/smartwatch.webp", w: 363, h: 480, alt: "Smartwatch" },
+  3: { src: "/rewards/smartphone.webp", w: 289, h: 620, alt: "Smartphone" },
+  6: { src: "/rewards/harley.webp", w: 674, h: 620, alt: "Harley-Davidson motorcycle" },
+};
+
 const FLIP_EVERY = 3200;
 const HALF_FLIP = 280;
 
@@ -153,54 +166,87 @@ export default function WelcomeGate({ tiers }: { tiers: Tier[] }) {
         </div>
       </div>
 
-      {/* The flipping showcase. */}
-      <div className="border-b border-[var(--color-line)] bg-[var(--color-ground)] px-7 py-6">
-        {reduced ? (
-          <ul className="flex items-center justify-center gap-6">
-            {showcase.map((t, i) => (
-              <li key={t.name} className="flex flex-col items-center text-center">
-                <span className="flex h-16 w-16 items-center justify-center" aria-hidden="true">
-                  {art[i]}
-                </span>
-                <span className="mt-1.5 text-[13px] font-semibold">{t.name}</span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <div className="flex flex-col items-center">
-            <div className="flip-stage">
-              <div className={`flip-face ${flipping ? "is-flipping" : ""}`}>
-                <span className="flex h-24 w-24 items-center justify-center" aria-hidden="true">
-                  {art[index]}
-                </span>
+      {/* The flipping showcase, on a near-black stage.
+          The Harley was photographed on a dark gradient and the other two were
+          keyed out of white studio backgrounds, so a dark stage is the one
+          surface all three sit on without looking like pasted rectangles. */}
+      <div className="relative overflow-hidden bg-[#12151c] px-6 py-6">
+        {/* Every photo is rendered from the start and only revealed in turn,
+            so rotating never waits on a download. The whole stack turns
+            together — a half-turn out, the face swaps at the edge, a
+            half-turn back in. */}
+        {/* Perspective belongs to the parent; the child is what turns. Putting
+            both on one element gives a flat squash rather than a rotation. */}
+        <div className="flip-stage mx-auto w-full max-w-[380px]">
+        <div
+          className={`relative flex h-[220px] w-full items-center justify-center ${
+            reduced ? "" : "flip-photo"
+          } ${flipping ? "is-flipping" : ""}`}
+        >
+          {showcase.map((t, i) => {
+            const photo = PHOTO[t.threshold];
+            const shown = reduced || i === index;
+            return (
+              <div
+                key={t.name}
+                className={`absolute inset-0 flex items-center justify-center transition-opacity duration-200 ${
+                  shown ? "opacity-100" : "pointer-events-none opacity-0"
+                } ${reduced ? "!relative !inset-auto" : ""}`}
+                aria-hidden={!shown}
+              >
+                {photo ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={photo.src}
+                    alt={photo.alt}
+                    width={photo.w}
+                    height={photo.h}
+                    loading="eager"
+                    decoding="async"
+                    className={`max-h-[220px] w-auto object-contain drop-shadow-[0_18px_28px_rgba(0,0,0,.55)] ${
+                      reduced ? "max-h-[110px]" : ""
+                    }`}
+                  />
+                ) : (
+                  <span className="flex h-24 w-24 items-center justify-center">
+                    {art[i]}
+                  </span>
+                )}
               </div>
-            </div>
+            );
+          })}
+        </div>
+        </div>
 
-            {/* aria-live so the rotation is announced rather than silently
-                changing under a screen reader. */}
-            <p aria-live="polite" className="mt-2 text-center">
-              <span className="block text-[17px] font-semibold tracking-[-0.01em]">
+        {!reduced && (
+          <>
+            <p aria-live="polite" className="relative mt-4 text-center">
+              <span className="block text-[19px] font-semibold tracking-[-0.01em] text-white">
                 {current?.name}
               </span>
-              <span className="mt-0.5 block text-[13px] font-medium text-[var(--color-mint)]">
+              <span className="mt-1 block text-[13px] font-medium text-[var(--color-mint)]">
                 {current?.threshold}{" "}
                 {current?.threshold === 1 ? "referral joins" : "referrals join"}
               </span>
             </p>
 
-            <div className="mt-3 flex gap-1.5" aria-hidden="true">
+            <div className="relative mt-3.5 flex justify-center gap-1.5" aria-hidden="true">
               {showcase.map((t, i) => (
                 <span
                   key={t.name}
                   className={`h-1.5 rounded-full transition-all duration-300 ${
-                    i === index
-                      ? "w-5 bg-[var(--color-brand)]"
-                      : "w-1.5 bg-[var(--color-line)]"
+                    i === index ? "w-5 bg-white" : "w-1.5 bg-white/30"
                   }`}
                 />
               ))}
             </div>
-          </div>
+          </>
+        )}
+
+        {reduced && (
+          <p className="mt-3 text-center text-[13px] text-white/70">
+            {showcase.map((t) => t.name).join(" · ")}
+          </p>
         )}
       </div>
 
@@ -272,14 +318,15 @@ export default function WelcomeGate({ tiers }: { tiers: Tier[] }) {
         @keyframes wIn  { from { opacity: 0; transform: translateY(14px) scale(.985); } }
         @keyframes wOut { to   { opacity: 0; transform: translateY(-6px) scale(.99); } }
 
-        /* The stage carries the perspective; the face does the turning. */
-        .flip-stage { perspective: 800px; }
-        .flip-face {
+        /* The stage carries the perspective; the photo does the turning. */
+        .flip-stage { perspective: 1100px; }
+        .flip-photo {
           transition: transform ${HALF_FLIP}ms cubic-bezier(.4,0,.2,1), opacity ${HALF_FLIP}ms linear;
           transform: rotateY(0deg);
           transform-style: preserve-3d;
+          will-change: transform;
         }
-        .flip-face.is-flipping { transform: rotateY(90deg); opacity: .35; }
+        .flip-photo.is-flipping { transform: rotateY(90deg); opacity: .25; }
 
         @media (prefers-reduced-motion: reduce) {
           .welcome-in, .welcome-out { animation: none; }
