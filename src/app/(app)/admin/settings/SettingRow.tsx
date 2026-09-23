@@ -21,7 +21,7 @@ export default function SettingRow({ spec, value }: { spec: Spec; value: string 
       <input type="hidden" name="key" value={spec.key} />
 
       <div className="flex flex-wrap items-start gap-4">
-        <div className="min-w-[260px] flex-1">
+        <div className="min-w-0 flex-1 basis-full sm:basis-[260px]">
           <label htmlFor={`s-${spec.key}`} className="text-[14.5px] font-medium">
             {spec.label}
           </label>
@@ -33,7 +33,7 @@ export default function SettingRow({ spec, value }: { spec: Spec; value: string 
           </code>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex w-full items-center gap-3 sm:w-auto">
           {spec.kind === "boolean" ? (
             <label className="flex items-center gap-2 text-[13.5px]">
               <input
@@ -51,7 +51,7 @@ export default function SettingRow({ spec, value }: { spec: Spec; value: string 
               name="value"
               defaultValue={value}
               inputMode={spec.kind === "integer" ? "numeric" : "text"}
-              className="field !w-[190px]"
+              className="field min-w-0 flex-1 sm:!w-[190px] sm:flex-none"
             />
           )}
 

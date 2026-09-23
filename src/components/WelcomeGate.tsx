@@ -64,6 +64,8 @@ function useReducedMotion(): boolean {
  */
 export default function WelcomeGate({ tiers }: { tiers: Tier[] }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const [pending, start] = useTransition();
   const [closing, setClosing] = useState(false);
@@ -84,6 +86,12 @@ export default function WelcomeGate({ tiers }: { tiers: Tier[] }) {
     const el = ref.current;
     if (!el || el.open) return;
     el.showModal();
+    // showModal() focuses the first focusable element, which is the button at
+    // the bottom — and the browser scrolls to it, so the poster opened with
+    // its own headline scrolled out of view. Focus the title instead: a
+    // screen reader announces what this is, and the poster opens at the top.
+    titleRef.current?.focus({ preventScroll: true });
+    bodyRef.current?.scrollTo({ top: 0 });
     const stopEscape = (e: KeyboardEvent) => {
       if (e.key === "Escape") e.preventDefault();
     };
@@ -143,12 +151,18 @@ export default function WelcomeGate({ tiers }: { tiers: Tier[] }) {
     <dialog
       ref={ref}
       aria-labelledby="welcome-title"
-      className={`m-auto w-[min(94vw,560px)] overflow-hidden rounded-2xl border border-[var(--color-line)] p-0
+      className={`m-auto w-[min(calc(100vw-24px),560px)] max-h-[calc(100dvh-24px)] max-w-none
+                  overflow-hidden rounded-2xl border border-[var(--color-line)] p-0 open:flex open:flex-col
                   backdrop:bg-[#171b24]/60 backdrop:backdrop-blur-[3px]
                   ${closing ? "welcome-out" : "welcome-in"}`}
     >
+      {/* Scrolls on its own, inside a height capped to the screen. The dialog
+          used to be overflow-hidden with no cap, so on anything shorter than
+          about 870px — every common laptop — the content was simply cut off
+          with no way to reach it. */}
+      <div ref={bodyRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
       {/* Hero — cash falling behind the promise. */}
-      <div className="relative overflow-hidden bg-[var(--color-brand)] px-7 pt-6 pb-7 text-white">
+      <div className="wg-hero wg-pad relative overflow-hidden bg-[var(--color-brand)] px-7 pt-6 pb-7 text-white">
         <div className="pointer-events-none absolute inset-0 opacity-[0.3]">
           <CashRain className="h-full w-full" />
         </div>
@@ -159,7 +173,9 @@ export default function WelcomeGate({ tiers }: { tiers: Tier[] }) {
           </p>
           <h2
             id="welcome-title"
-            className="mt-1.5 text-[25px] leading-[1.15] font-semibold tracking-[-0.02em]"
+            ref={titleRef}
+            tabIndex={-1}
+            className="wg-title mt-1.5 text-[25px] leading-[1.15] font-semibold tracking-[-0.02em] outline-none"
           >
             Refer someone good. Get paid for it.
           </h2>
@@ -170,7 +186,7 @@ export default function WelcomeGate({ tiers }: { tiers: Tier[] }) {
           The Harley was photographed on a dark gradient and the other two were
           keyed out of white studio backgrounds, so a dark stage is the one
           surface all three sit on without looking like pasted rectangles. */}
-      <div className="relative overflow-hidden bg-[#12151c] px-6 py-6">
+      <div className="wg-show relative overflow-hidden bg-[#12151c] px-6 py-6">
         {/* Every photo is rendered from the start and only revealed in turn,
             so rotating never waits on a download. The whole stack turns
             together — a half-turn out, the face swaps at the edge, a
@@ -179,7 +195,7 @@ export default function WelcomeGate({ tiers }: { tiers: Tier[] }) {
             both on one element gives a flat squash rather than a rotation. */}
         <div className="flip-stage mx-auto w-full max-w-[380px]">
         <div
-          className={`relative flex h-[220px] w-full items-center justify-center ${
+          className={`wg-stage relative flex h-[220px] w-full items-center justify-center ${
             reduced ? "" : "flip-photo"
           } ${flipping ? "is-flipping" : ""}`}
         >
@@ -203,7 +219,7 @@ export default function WelcomeGate({ tiers }: { tiers: Tier[] }) {
                     height={photo.h}
                     loading="eager"
                     decoding="async"
-                    className={`max-h-[220px] w-auto object-contain drop-shadow-[0_18px_28px_rgba(0,0,0,.55)] ${
+                    className={`wg-img max-h-[220px] w-auto object-contain drop-shadow-[0_18px_28px_rgba(0,0,0,.55)] ${
                       reduced ? "max-h-[110px]" : ""
                     }`}
                   />
@@ -220,7 +236,7 @@ export default function WelcomeGate({ tiers }: { tiers: Tier[] }) {
 
         {!reduced && (
           <>
-            <p aria-live="polite" className="relative mt-4 text-center">
+            <p aria-live="polite" className="wg-name relative mt-4 text-center">
               <span className="block text-[19px] font-semibold tracking-[-0.01em] text-white">
                 {current?.name}
               </span>
@@ -230,7 +246,7 @@ export default function WelcomeGate({ tiers }: { tiers: Tier[] }) {
               </span>
             </p>
 
-            <div className="relative mt-3.5 flex justify-center gap-1.5" aria-hidden="true">
+            <div className="wg-dots relative mt-3.5 flex justify-center gap-1.5" aria-hidden="true">
               {showcase.map((t, i) => (
                 <span
                   key={t.name}
@@ -251,13 +267,13 @@ export default function WelcomeGate({ tiers }: { tiers: Tier[] }) {
       </div>
 
       {/* The board — everything at once, so nobody waits for the carousel. */}
-      <div className="px-7 py-5">
-        <p className="mb-2.5 text-[11px] font-semibold tracking-[0.12em] text-[var(--color-ink-3)] uppercase">
+      <div className="wg-board wg-pad px-7 pt-5 pb-4">
+        <p className="wg-label mb-2.5 text-[11px] font-semibold tracking-[0.12em] text-[var(--color-ink-3)] uppercase">
           What you get
         </p>
 
         <div className="overflow-hidden rounded-xl border border-[var(--color-line)]">
-          <div className="flex items-center gap-3 border-b border-[var(--color-line)] bg-[var(--color-gold-soft)] px-4 py-3">
+          <div className="wg-cash flex items-center gap-3 border-b border-[var(--color-line)] bg-[var(--color-gold-soft)] px-4 py-3">
             <CoinStackArt className="h-9 w-9 shrink-0" />
             <div className="min-w-0">
               <p className="text-[14px] font-semibold">Cash on every hire</p>
@@ -274,7 +290,7 @@ export default function WelcomeGate({ tiers }: { tiers: Tier[] }) {
               .map((t) => (
                 <li
                   key={t.name}
-                  className="flex items-center justify-between gap-3 border-b border-[var(--color-line)] px-4 py-2.5 last:border-b-0"
+                  className="wg-row flex items-center justify-between gap-3 border-b border-[var(--color-line)] px-4 py-2.5 last:border-b-0"
                 >
                   <span className="text-[13.5px] font-medium">{t.name}</span>
                   <span className="shrink-0 text-[12.5px] text-[var(--color-ink-3)]">
@@ -285,16 +301,22 @@ export default function WelcomeGate({ tiers }: { tiers: Tier[] }) {
           </ul>
         </div>
 
-        <p className="mt-3 text-[12px] leading-relaxed text-[var(--color-ink-3)]">
+        <p className="wg-note mt-3 text-[12px] leading-relaxed text-[var(--color-ink-3)]">
           Rewards are taxable salary income and shown gross. Gift tiers are tracked here;
           ordering and delivery are handled by HR.
         </p>
 
+      </div>
+      </div>
+
+      {/* The footer never scrolls away: the primary action is visible on every
+          screen size, whatever the content above it is doing. */}
+      <div className="wg-pad shrink-0 border-t border-[var(--color-line)] bg-white px-7 pt-3 pb-3">
         <button
           type="button"
           onClick={() => leave("/roles")}
           disabled={pending}
-          className="btn-primary mt-4 w-full !py-3 text-[15px]"
+          className="btn-primary w-full !py-3 text-[15px]"
         >
           {pending ? "One moment…" : "Refer someone — see open roles"}
         </button>
@@ -306,7 +328,7 @@ export default function WelcomeGate({ tiers }: { tiers: Tier[] }) {
           type="button"
           onClick={() => leave()}
           disabled={pending}
-          className="mt-2 w-full py-1.5 text-[13px] text-[var(--color-ink-3)] hover:text-[var(--color-ink)] hover:underline"
+          className="mt-1.5 w-full py-1.5 text-[13px] text-[var(--color-ink-3)] hover:text-[var(--color-ink)] hover:underline"
         >
           Maybe later
         </button>
@@ -328,9 +350,40 @@ export default function WelcomeGate({ tiers }: { tiers: Tier[] }) {
         }
         .flip-photo.is-flipping { transform: rotateY(90deg); opacity: .25; }
 
+        /* Unlayered, so these win over Tailwind's layered utilities. The aim
+           is for the whole poster to fit without scrolling on a normal laptop
+           and still read well on a phone; scrolling is the fallback, not the
+           plan. */
+        @media (max-height: 860px) {
+          .wg-hero  { padding-top: 16px; padding-bottom: 18px; }
+          .wg-title { font-size: 22px; }
+          .wg-show  { padding-top: 14px; padding-bottom: 14px; }
+          .wg-stage { height: 160px; }
+          .wg-img   { max-height: 160px; }
+          .wg-board { padding-top: 14px; padding-bottom: 12px; }
+          .wg-name  { margin-top: 10px; }
+          .wg-dots  { margin-top: 8px; }
+          .wg-label { margin-bottom: 8px; }
+          .wg-cash  { padding-top: 8px; padding-bottom: 8px; }
+          .wg-row   { padding-top: 7px; padding-bottom: 7px; }
+          .wg-note  { margin-top: 8px; }
+        }
+        @media (max-height: 780px) {
+          .wg-stage { height: 138px; }
+          .wg-img   { max-height: 138px; }
+        }
+        @media (max-height: 700px) {
+          .wg-stage { height: 120px; }
+          .wg-img   { max-height: 120px; }
+        }
+        @media (max-width: 420px) {
+          .wg-pad   { padding-left: 18px; padding-right: 18px; }
+          .wg-title { font-size: 21px; }
+        }
+
         @media (prefers-reduced-motion: reduce) {
           .welcome-in, .welcome-out { animation: none; }
-          .flip-face { transition: none; }
+          .flip-photo { transition: none; }
         }
       `}</style>
     </dialog>
