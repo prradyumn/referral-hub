@@ -98,12 +98,21 @@ try {
   check(Number(r2.advanced) === 0, "does NOT append the same stage twice");
   check((await stageRows()).length === 2, "still two stage rows, not three");
 
+  console.log("\na referral taken out of the process in Keka");
+  const rArc = await applyStage("Archived", "2026-09-19T09:00:00Z");
+  check(Number(rArc.advanced) === 1, "an Archived candidate is recorded");
+  const afterArc = await one(`select current_stage from referrals where id=$1`, [referralId]);
+  check(afterArc.current_stage === "No longer in process",
+    `the employee is told it closed (got "${afterArc.current_stage}")`);
+  check(!/reject|reason|feedback/i.test(afterArc.current_stage),
+    "and never why — the reason stays in Keka");
+
   console.log("\nan unrecognised stage");
   const weird = `Bespoke Stage ${TAG}`;
   const r3 = await applyStage(weird, "2026-09-19T10:00:00Z");
   check(Number(r3.advanced) === 1, "is recorded in referral_stages");
   const afterWeird = await one(`select current_stage from referrals where id=$1`, [referralId]);
-  check(afterWeird.current_stage === "Profile shortlisted",
+  check(afterWeird.current_stage === "No longer in process",
     "does NOT become the employee-facing status — the Hub invents no wording");
   const parked = await one(
     `select is_visible, employee_wording from keka_stage_map where keka_stage_id=$1`, [weird]);

@@ -24,6 +24,8 @@ import { parseKekaDate } from "@/lib/keka/map";
 type KekaCandidate = {
   id?: string;
   email?: string;
+  /** Present on archived candidates. Keka's keys carry spaces. */
+  archivedDetails?: Record<string, string | number | null | undefined>;
   jobApplicationDetails?: {
     jobHiringStageId?: string;
     status?: number;
@@ -80,11 +82,20 @@ export async function syncReferralStages(
   }[] = [];
 
   for (const jobId of jobIds) {
-    const candidates = await kekaList<KekaCandidate>(
-      `/v1/hire/jobs/${encodeURIComponent(jobId)}/candidates`,
-      // ISO on the way in; Keka rejects epoch here with a 400. See §16.
-      { lastModified: since ? since.toISOString() : undefined },
-    );
+    const path = `/v1/hire/jobs/${encodeURIComponent(jobId)}/candidates`;
+    // ISO on the way in; Keka rejects epoch here with a 400. See §16.
+    const window = { lastModified: since ? since.toISOString() : undefined };
+
+    // Active and archived both. Keka hides archived candidates unless asked
+    // (isArchived defaults to false), and archiving is how a candidate is
+    // taken out of the process. Pulling active only meant a rejected referral
+    // stayed on its last stage in the Hub forever — the employee would watch
+    // "Interviewing" for months and never learn it had closed.
+    const [active, archived] = await Promise.all([
+      kekaList<KekaCandidate>(path, window),
+      kekaList<KekaCandidate>(path, { ...window, isArchived: true }),
+    ]);
+    const candidates = [...active, ...archived];
 
     result.read += candidates.length;
 
@@ -92,8 +103,15 @@ export async function syncReferralStages(
       const d = c.jobApplicationDetails;
       if (!c.email?.trim() || !d?.jobHiringStageId?.trim()) continue;
 
+      // An archived candidate's own date is when it was archived. The reason
+      // is deliberately not read: commitment 2 keeps rejection reasoning in
+      // the ATS, and the surest way not to show it is not to hold it.
+      const archivedOn = c.archivedDetails?.["archived On"];
       const moved =
-        parseKekaDate(d.movedtoStageOn) ?? parseKekaDate(d.appliedOn) ?? null;
+        parseKekaDate(archivedOn as string | undefined) ??
+        parseKekaDate(d.movedtoStageOn) ??
+        parseKekaDate(d.appliedOn) ??
+        null;
 
       rows.push({
         keka_job_id: jobId,

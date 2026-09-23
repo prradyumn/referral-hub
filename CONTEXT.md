@@ -1558,3 +1558,32 @@ will stop meaning `verify-full` in a future major version. Following it up found
 but accepting any certificate, so no protection against interception. Neon presents a
 valid certificate and was verified to work with full verification, so nothing was being
 bought by having it off. Now `verify-full`, and the warning is gone.
+
+---
+
+## 22. Archived candidates, and what tracking needs from Keka
+
+**Found 23 Sep 2026: rejected referrals would never have closed.** Keka's candidate
+endpoint returns active candidates only unless called with `isArchived=true`, and
+archiving is how Keka takes someone out of the process. 73 of 1,444 candidates across 15
+referral-enabled jobs were archived, each on stage `Archived`, with `archivedDetails` =
+`archived By`, `archived On`, `archived Reason` (keys with spaces). The stage sync read
+active only, so a rejected referral would have stayed on "Interviewing" indefinitely.
+
+`src/lib/keka/stages.ts` now pulls both, and `db/0012` maps `Archived` to "No longer in
+process" — visible, never a notification. The date used is `archived On`. **`archived
+Reason` is never read**: commitment 2 keeps rejection reasoning in the ATS.
+
+db/0006 had deleted a guessed `Archived` row because a 30-job scan never saw one — the
+scan only read active candidates. A scan that cannot see a state is not evidence the
+state does not exist.
+
+### What tracking depends on
+
+| Needed | Why | State today |
+| --- | --- | --- |
+| Referrer's **work email** as a required field on Keka's referral form | If people refer in Keka, this is the only way the Hub knows whose referral it is. A name is not enough — it must match the Hub login | Missing. Only a free-text name, on about a third of referrals |
+| Recruiters move candidates through stages in Keka | The Hub mirrors Keka; a stage never updated there never updates here | Most candidates sit at `Sourced` |
+| `Hired` used whenever someone joins | It is what creates the reward | Used — 20 seen |
+| Rejected candidates archived, not left on their last stage | Otherwise the referral never closes | Archiving is in use |
+| API key with employee records (HRIS) | True joining date; still employed on day 30 | Refused (403) |
