@@ -1,16 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="ConveGenius">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-8 -12 272 264" role="img" aria-label="ConveGenius">
   <title>ConveGenius</title>
-  <g fill="#454b9e">
-  <circle cx="30.93" cy="23.07" r="3.5"/>
-  <circle cx="23.62" cy="18.10" r="3.5"/>
-  <circle cx="14.78" cy="18.29" r="3.5"/>
-  <circle cx="7.70" cy="23.58" r="3.5"/>
-  <circle cx="5.00" cy="32.00" r="3.5"/>
-  <circle cx="7.70" cy="40.42" r="3.5"/>
-  <circle cx="14.78" cy="45.71" r="3.5"/>
-  <circle cx="23.62" cy="45.90" r="3.5"/>
-  <circle cx="30.93" cy="40.93" r="3.5"/>
-  </g>
-  <path d="M34 32 H62 A20 20 0 0 0 42 12 H34 Z" fill="#8ed3cb"/>
-  <path d="M34 32 H62 A20 20 0 0 1 42 52 H34 Z" fill="#454b9e"/>
+  <g fill="#454b9e"><circle cx="58" cy="212" r="14"/><circle cx="27" cy="174" r="14"/><circle cx="15" cy="125" r="14"/><circle cx="27" cy="76" r="14"/><circle cx="57" cy="39" r="14"/><circle cx="104" cy="15" r="14"/><circle cx="152" cy="15" r="14"/><circle cx="199" cy="38" r="14"/></g>
+  <path d="M128 108 H255 A127 127 0 0 1 232.6 180 H128 Z" fill="#8ed3cb"/>
+  <path d="M128 180 H232.6 A127 127 0 0 1 128 235 Z" fill="#454b9e"/>
 </svg>
