@@ -553,6 +553,29 @@ auto-generated alias is a treadmill; setting `AUTH_URL` to the production origin
 of them use one canonical callback. `curl -s <host>/api/auth/providers` prints the callback
 each host will use — that is the fastest way to see the problem.
 
+**…and `AUTH_URL` alone only moves the failure.** It pins where the callback *lands*, but
+sign-in still *starts* on whatever host the person is on, and that is where Auth.js sets
+its PKCE cookie. Starting on `referral-hub-pi.vercel.app` and landing on
+`referral-hub-prradyumns-projects.vercel.app` meant the callback could not read the cookie
+— `[auth][error] InvalidCheck: pkceCodeVerifier value could not be parsed`, which the
+login page renders as "Sign-in is not configured correctly". The error page is served on
+the canonical host, so the **second** attempt started and finished in one place and
+worked: the tell-tale "only fails the first time". Seen in production on 23 Sep 2026 via
+`vercel logs --environment production --query auth`.
+
+The fix is in `src/proxy.ts`: every GET on a host other than `AUTH_URL`'s is sent there
+with a 308 before anything else runs, so sign-in always starts on the host the callback
+lands on. Production answers on four hostnames (`-pi`, `-prradyumns-projects`,
+`-git-main-…` and a per-deployment URL) and this covers all of them. It is off when
+`AUTH_URL` is unset — local dev and preview deployments — and never touches `/api/cron`,
+POSTs, or localhost.
+
+**To make the short `referral-hub-pi.vercel.app` the canonical host instead**, add
+`https://referral-hub-pi.vercel.app/api/auth/callback/google` to the Google OAuth client's
+redirect URIs, then change `AUTH_URL` to `https://referral-hub-pi.vercel.app`. No code
+change — the redirect follows `AUTH_URL`. Do the Google step first, or sign-in breaks for
+everyone in between.
+
 **Auth.js needs a redirect URI per *path*, not per project.** The Supabase-era entry
 `…supabase.co/auth/v1/callback` does not match `…/api/auth/callback/google`. The Google
 OAuth client itself is unchanged and still correct — only the URI list was stale. Removing
