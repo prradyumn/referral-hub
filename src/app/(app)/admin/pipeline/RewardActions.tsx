@@ -1,5 +1,6 @@
 "use client";
 
+import { useToastResult } from "@/components/Toast";
 import { useActionState } from "react";
 import { approveReward, markPaid, type PipelineState } from "./actions";
 
@@ -7,6 +8,7 @@ const initial: PipelineState = { status: "idle" };
 
 export function ApproveButton({ rewardId }: { rewardId: string }) {
   const [state, action, pending] = useActionState(approveReward, initial);
+  useToastResult(state);
   return (
     <form action={action} className="flex items-center gap-2">
       <input type="hidden" name="rewardId" value={rewardId} />
@@ -29,6 +31,7 @@ export function ApproveButton({ rewardId }: { rewardId: string }) {
 
 export function MarkPaidForm({ rewardId }: { rewardId: string }) {
   const [state, action, pending] = useActionState(markPaid, initial);
+  useToastResult(state);
   return (
     <form action={action} className="flex flex-wrap items-center gap-2">
       <input type="hidden" name="rewardId" value={rewardId} />

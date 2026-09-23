@@ -1636,3 +1636,68 @@ laptop size checked and on a 390px phone.
 
 `npm run e2e:bands` covers all of it — 16 checks. `npm run keka:check` has 16 classifier
 assertions pinned to real tenant titles.
+
+## 24. The UX pass, 23 September 2026
+
+Nine changes from a design review of the whole app, all live.
+
+**The TA inbox (`/admin/inbox`).** Referrals cannot be pushed into Keka (§16, "The push is
+blocked"), so they used to stop at the Hub and nobody was told. The inbox lists every
+referral Keka has not matched yet, oldest first, with a paste-ready "Copy details" and a
+"Mark added to Keka" tick (`referrals.ta_added_at`, `ta_added_by`, db/0015). Keka is still
+the source of truth: once TA adds the candidate, the stage sync matches them on email and
+tracking starts on its own. The Hub form stays the way in, because Keka has no structured
+referrer field and a referral made there cannot be attributed reliably (§22).
+
+**The refer form** picks a role by typing (`RolePicker.tsx`, an ARIA combobox showing each
+role's cash), shows "If they join, you earn cash up to ₹X" as soon as a role is picked, and
+ends on an honest three-step "what happens next". CV upload is **not** built; it needs
+Vercel Blob.
+
+**Home for someone with no referrals** (`home/FirstVisit.tsx`) leads with the offer, the
+four best-paying open roles, the gift ladder with photographs, and three steps. The
+figure-filled dashboard returns after the first referral.
+
+**Navigation.** Phones get a bottom tab bar (Home, Roles, a raised Refer button, Referrals,
+Rewards) and a "More" menu. On desktop the current page is highlighted (`aria-current`).
+
+**Login** has two columns: the offer (cash up to the top band, the gift photographs) beside
+sign-in, the real logo, and Google's "G" on the button. On a phone the gifts are hidden so
+the sign-in button stays above the fold, even at 320×568.
+
+**Tracking** (`components/ReferralProgress.tsx`) folds Keka's eight stages into five
+steps: Received, Shortlisted, Interviewing, Offer accepted, Joined. "Closed" is shown
+apart, as an ending rather than a sixth step, with how far the referral got. The detail
+page adds days at the current step, what happens next, and, once they have joined, a
+countdown to the reward.
+
+**How to refer** shows HR's band table, read from `reward_bands`. The video slot is
+hidden until `app_settings.howto_video_url` is set (db/0016; editable in Settings).
+
+**Admin rewards** is a table: search, a department filter, filter chips with counts,
+sortable columns, and inline editing. A changed row is highlighted and saves on its own;
+choosing a band applies it at once. The band table is folded away.
+
+**Polish.**
+- `--color-ink-3` is darkened to #5c6372, 5.6:1 on the ground colour. It was 3.8:1, below
+  WCAG AA.
+- Admin actions confirm with a toast (`components/Toast.tsx`). That matters for the inbox,
+  where a successful row moves to the other tab.
+- Employee pages show a skeleton while Postgres answers.
+
+**A trap found on the way: loading.tsx changes status codes.** A loading boundary makes a
+route stream, and a streamed response has already sent `200 OK` by the time `notFound()`
+runs. With one at the `(app)` level, a non-admin opening `/admin/*` got 200 with a 404 body.
+Nothing leaked, but the status lied, and `e2e:admin` caught it.
+
+The fix, and the rule from now on:
+- Skeletons sit per employee route.
+- There are none under `/admin`.
+- The referrals list sits in a `(list)` route group, so `/referrals/[id]` (which 404s for
+  someone else's referral) is outside its boundary.
+
+`e2e:admin` now also asserts that a referral which isn't yours answers 404.
+
+**Verified:** 8 viewports from 320 to 1440 × 12 pages, no horizontal overflow; poster fits
+or scrolls to its end everywhere. `keka:check`, `e2e:bands`, `e2e:stages`, `e2e:engine`,
+`e2e:admin`, `e2e-scoping` and `e2e-refer` pass, and the production build succeeds.

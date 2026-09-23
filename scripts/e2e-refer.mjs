@@ -38,7 +38,12 @@ async function submit(label) {
   await page.goto(`${BASE}/refer`, { waitUntil: "networkidle" });
   await page.evaluate(() => { try { localStorage.setItem("referral-hub:welcome-seen","1"); } catch {} ; document.querySelector("dialog[open]")?.close(); });
 
-  await page.selectOption("#jobId-select", { index: 1 });
+  // The role picker is a searchable combobox: type, then Enter picks the
+  // highlighted match — the keyboard path a person would use.
+  await page.click("#jobId");
+  await page.keyboard.type("a");
+  await page.keyboard.press("Enter");
+  await page.waitForSelector('button:has-text("Change role")', { timeout: 5000 });
   await page.fill("#fullName", CAND.name);
   await page.fill("#email", CAND.email);
   await page.fill("#phone", CAND.phone);

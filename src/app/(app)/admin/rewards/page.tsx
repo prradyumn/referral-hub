@@ -2,7 +2,7 @@ import { query } from "@/lib/db";
 import { requireAdmin } from "@/lib/admin";
 import { PageHead, Card } from "@/components/Chrome";
 import AdminNav from "../AdminNav";
-import RewardRow from "./RewardRow";
+import RewardsTable from "./RewardsTable";
 import DepartmentBulk from "./DepartmentBulk";
 import BandTable, { ConfirmSuggested, type BandRow } from "./BandTable";
 
@@ -50,7 +50,8 @@ export default async function AdminRewardsPage({
   );
   const bandOptions = bandRows.map((b) => ({
     value: `${b.track}:${b.band}`,
-    label: `${b.track === "engineering" ? "Eng" : "Non-eng"} ${b.band} — ${b.designation} — ${
+    // Short: it sits in a 150px table cell. The designation is on the band table above.
+    label: `${b.track === "engineering" ? "Eng" : "Non-eng"} ${b.band} · ${
       b.amount_label ?? `₹${b.amount.toLocaleString("en-IN")}`
     }`,
     disabled: b.needs_clarification,
@@ -61,14 +62,6 @@ export default async function AdminRewardsPage({
 
   const departments = [...new Set(jobs.map((j) => j.department))].sort();
   const pending = jobs.filter((j) => !j.reward_confirmed);
-
-  const shown = jobs.filter((j) => {
-    if (sp.dept && j.department !== sp.dept) return false;
-    if (sp.show === "pending" && j.reward_confirmed) return false;
-    if (sp.show === "review" && j.band_source !== "experience") return false;
-    if (sp.show === "confirmed" && !j.reward_confirmed) return false;
-    return true;
-  });
 
   return (
     <>
@@ -93,7 +86,19 @@ export default async function AdminRewardsPage({
 
       {/* HR's band table. Each open role is placed in a band and takes its
           reward from here; changing a row re-prices every role that follows it. */}
-      <h2 className="mt-2 mb-2 text-[15px] font-semibold">Band table</h2>
+      {/* Folded by default: it changes rarely, and open it pushed the roles —
+          the thing HR comes here for — two screens down. */}
+      <details className="group card mt-2 p-0">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4 [&::-webkit-details-marker]:hidden">
+          <span>
+            <span className="block text-[15px] font-semibold">Band table</span>
+            <span className="block text-[12.5px] text-[var(--color-ink-3)]">
+              {bandRows.length} bands · edit an amount to re-price every role in that band
+            </span>
+          </span>
+          <span aria-hidden="true" className="text-[var(--color-ink-3)] transition group-open:rotate-180">▾</span>
+        </summary>
+        <div className="border-t border-[var(--color-line)] p-5">
       <p className="mb-3 text-[13px] leading-relaxed text-[var(--color-ink-3)]">
         Every open role takes its band&apos;s reward automatically. Where the title names a
         designation, the band comes from the title; where it does not, from the experience
@@ -101,6 +106,8 @@ export default async function AdminRewardsPage({
         wrong and they keep your choice from then on.
       </p>
       <BandTable rows={bandRows} />
+        </div>
+      </details>
 
       {suggested.length > 0 && (
         <Card className="mt-4 mb-6">
@@ -108,7 +115,7 @@ export default async function AdminRewardsPage({
             <strong className="font-semibold text-[var(--color-ink)]">
               {suggested.length} roles have a band suggested from experience.
             </strong>{" "}
-            Filter by “Band suggested” below to check them, correct any that are wrong, then
+            Filter by “From experience” below to check them, correct any that are wrong, then
             confirm the rest in one go.
           </p>
           <ConfirmSuggested count={suggested.length} />
@@ -118,41 +125,7 @@ export default async function AdminRewardsPage({
       <h2 className="mt-6 mb-2 text-[15px] font-semibold">Roles</h2>
       <DepartmentBulk departments={departments} />
 
-      <form method="get" className="card mb-4 flex flex-wrap items-end gap-3 p-4">
-        <div>
-          <label htmlFor="dept" className="label">Department</label>
-          <select id="dept" name="dept" defaultValue={sp.dept ?? ""} className="field">
-            <option value="">All departments</option>
-            {departments.map((d) => <option key={d} value={d}>{d}</option>)}
-          </select>
-        </div>
-        <div>
-          <label htmlFor="show" className="label">Show</label>
-          <select id="show" name="show" defaultValue={sp.show ?? ""} className="field">
-            <option value="">All roles</option>
-            <option value="review">Band from experience</option>
-            <option value="pending">Needs a reward</option>
-            <option value="confirmed">Confirmed</option>
-          </select>
-        </div>
-        <button type="submit" className="btn-ghost mb-0.5">Apply</button>
-      </form>
-
-      <p className="mb-3 text-[13px] text-[var(--color-ink-3)]">
-        {shown.length} of {jobs.length} open roles
-      </p>
-
-      <div className="grid gap-2">
-        {shown.map((job) => (
-          <RewardRow key={job.id} job={job} bands={bandOptions} />
-        ))}
-      </div>
-
-      {shown.length === 0 && (
-        <div className="card p-10 text-center text-[14px] text-[var(--color-ink-3)]">
-          No roles match those filters.
-        </div>
-      )}
+      <RewardsTable jobs={jobs} bands={bandOptions} initialDept={sp.dept} initialShow={sp.show} />
 
       <p className="mt-6 text-[13px] leading-relaxed text-[var(--color-ink-3)]">
         Changing a reward here never alters a referral already submitted. Each referral

@@ -4,7 +4,8 @@ import { useActionState, useMemo, useState } from "react";
 import Link from "next/link";
 import { submitReferral, type SubmitState } from "./actions";
 import { referralSchema, RELATIONSHIPS, CONSENT_NOTICE, formatPhone } from "@/lib/validation";
-import { rewardLabel } from "@/lib/format";
+import { rupees } from "@/lib/format";
+import RolePicker from "./RolePicker";
 
 export type JobOption = {
   id: string;
@@ -103,10 +104,25 @@ export default function ReferralForm({
           <strong>{state.refCode}</strong> · {state.candidateName}
           {state.jobTitle ? ` for ${state.jobTitle}` : ""}
         </p>
-        <p className="mt-4 text-[14px] leading-relaxed text-[var(--color-ink-3)]">
-          Talent Acquisition takes it from here. You will see every stage change in My
-          referrals — you do not need to chase the recruiter.
-        </p>
+        {/* Say what actually happens next, step by step. The Hub cannot put the
+            candidate into Keka itself yet; a recruiter does, from the inbox. */}
+        <ol className="mx-auto mt-6 max-w-[420px] space-y-3 text-left">
+          {[
+            ["Talent Acquisition adds them", "Your referral lands in TA's inbox and they add the candidate to the hiring pipeline."],
+            ["You track every stage here", "Shortlisted, interviewing, offer — it updates on its own. No need to chase anyone."],
+            ["They join, you get paid", "The reward is paid with your salary after the qualifying period, and earns you gift points."],
+          ].map(([h, b], i) => (
+            <li key={h} className="flex gap-3">
+              <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--color-brand-soft)] text-[12px] font-semibold text-[var(--color-brand)]">
+                {i + 1}
+              </span>
+              <span>
+                <span className="block text-[14px] font-semibold">{h}</span>
+                <span className="block text-[13px] leading-relaxed text-[var(--color-ink-3)]">{b}</span>
+              </span>
+            </li>
+          ))}
+        </ol>
         <div className="mt-7 flex flex-col gap-2 sm:flex-row sm:justify-center">
           <Link href="/referrals" className="btn-primary">
             Track this referral
@@ -151,23 +167,41 @@ export default function ReferralForm({
         {shownStep === 1 ? (
           <>
             <div className="mb-5">
-              <label htmlFor="jobId-select" className="label">
+              <label htmlFor="jobId" className="label">
                 Which role? <span className="text-[var(--color-danger)]">*</span>
               </label>
-              <select
-                id="jobId-select"
+              <RolePicker
+                id="jobId"
+                jobs={jobs}
                 value={jobId}
-                onChange={(e) => setJobId(e.target.value)}
-                className={`field ${errors.jobId ? "field-error" : ""}`}
-              >
-                <option value="">Select a role</option>
-                {jobs.map((j) => (
-                  <option key={j.id} value={j.id}>
-                    {j.title} — {j.location} · {rewardLabel(j.reward_amount, j.reward_confirmed)}
-                  </option>
-                ))}
-              </select>
+                onChange={setJobId}
+                error={errors.jobId}
+              />
               {errors.jobId && <p className="hint">{errors.jobId}</p>}
+
+              {/* What this referral could earn, in view while filling the rest
+                  in — not held back until the review step. */}
+              {job && (
+                job.reward_confirmed ? (
+                  <div className="cash-panel cash-shine-loop mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 px-3.5 py-2.5">
+                    <span className="cash-coin h-9 w-9 text-[15px]" aria-hidden="true">₹</span>
+                    <p className="min-w-0 flex-1 text-[13.5px] text-[#6b4200]">
+                      If they join, you earn{" "}
+                      <span className="cash-amount text-[19px] font-extrabold">
+                        cash up to {rupees(job.reward_amount)}
+                      </span>
+                    </p>
+                    <span className="rounded-full bg-white/75 px-2 py-1 text-[11px] font-semibold text-[#7a5200] ring-1 ring-[#a8760f]/25">
+                      +{Math.round(job.reward_amount).toLocaleString("en-IN")} reward points
+                    </span>
+                  </div>
+                ) : (
+                  <p className="mt-3 rounded-md bg-[var(--color-ground)] px-3.5 py-2.5 text-[13px] text-[var(--color-ink-2)]">
+                    The reward for this role is still being confirmed. Whatever is agreed
+                    applies to your referral.
+                  </p>
+                )
+              )}
             </div>
 
             <div className="grid gap-5 sm:grid-cols-2">
@@ -298,8 +332,14 @@ export default function ReferralForm({
               <Row k="How you know them" v={values.relationship} />
               <Row k="Role" v={job ? `${job.title} · ${job.location}` : "—"} />
               <Row
-                k="Referral reward if they join"
-                v={job ? rewardLabel(job.reward_amount, job.reward_confirmed) : "—"}
+                k="If they join, you earn"
+                v={
+                  job
+                    ? job.reward_confirmed
+                      ? `Cash up to ${rupees(job.reward_amount)}`
+                      : "Reward to be confirmed"
+                    : "—"
+                }
                 strong
               />
             </dl>

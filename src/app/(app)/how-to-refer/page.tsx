@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireSignedInUser } from "@/lib/employees";
 import { howToSteps, policyPoints } from "@/lib/showcase";
 import { query } from "@/lib/db";
-import { points } from "@/lib/format";
+import { points, rupees } from "@/lib/format";
 import { Card, PageHead } from "@/components/Chrome";
 
 export default async function HowToReferPage() {
@@ -14,6 +14,23 @@ export default async function HowToReferPage() {
   );
 
   await requireSignedInUser();
+
+  const [bands, [video]] = await Promise.all([
+    query<{ track: string; band: string; designation: string; amount: number; needs_clarification: boolean }>(
+      `select track, band, designation, amount, needs_clarification
+         from reward_bands order by band`,
+    ),
+    query<{ value: string }>(`select value from app_settings where key = 'howto_video_url'`),
+  ]);
+  const videoUrl = video?.value.trim() || null;
+  const playsInline = videoUrl !== null && /\.(mp4|webm)(\?|$)/i.test(videoUrl);
+
+  // One row per band, engineering and non-engineering side by side.
+  const bandRows = [...new Set(bands.map((b) => b.band))].map((band) => ({
+    band,
+    eng: bands.find((b) => b.band === band && b.track === "engineering"),
+    non: bands.find((b) => b.band === band && b.track === "non_engineering"),
+  }));
 
   return (
     <>
@@ -54,21 +71,33 @@ export default async function HowToReferPage() {
         </Card>
 
         <div className="grid content-start gap-3">
-          {/* Video — placeholder until Comms supplies the file */}
-          <Card>
-            <p className="mb-3 text-[13px] font-medium text-[var(--color-ink-2)]">
-              Watch the two-minute walkthrough
-            </p>
-            <div className="flex aspect-video items-center justify-center rounded-lg border border-dashed border-[var(--color-line)] bg-[var(--color-ground)]">
-              <span className="flex flex-col items-center gap-2 text-[var(--color-ink-3)]">
-                <svg viewBox="0 0 48 48" className="h-11 w-11" aria-hidden="true">
-                  <circle cx="24" cy="24" r="17" fill="none" stroke="currentColor" strokeWidth="2" />
-                  <path d="M20 17l12 7-12 7z" fill="currentColor" />
-                </svg>
-                <span className="text-[12.5px]">Video to come from Comms</span>
-              </span>
-            </div>
-          </Card>
+          {/* Only once Comms has supplied one — app_settings.howto_video_url.
+              A dashed "video to come" box on a live tool reads as unfinished. */}
+          {videoUrl && (
+            <Card>
+              <p className="mb-3 text-[13px] font-medium text-[var(--color-ink-2)]">
+                Watch the two-minute walkthrough
+              </p>
+              {playsInline ? (
+                <video src={videoUrl} controls preload="metadata" className="aspect-video w-full rounded-lg bg-black" />
+              ) : (
+                <a
+                  href={videoUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex aspect-video items-center justify-center rounded-lg bg-[#161a2e] text-white transition hover:bg-[#232848]"
+                >
+                  <span className="flex flex-col items-center gap-2">
+                    <svg viewBox="0 0 48 48" className="h-12 w-12" aria-hidden="true">
+                      <circle cx="24" cy="24" r="17" fill="none" stroke="currentColor" strokeWidth="2" />
+                      <path d="M20 17l12 7-12 7z" fill="currentColor" />
+                    </svg>
+                    <span className="text-[13px]">Play the walkthrough ↗</span>
+                  </span>
+                </a>
+              )}
+            </Card>
+          )}
 
           {/* Benefits flyer */}
           <Card>
@@ -94,6 +123,42 @@ export default async function HowToReferPage() {
         </div>
       </div>
 
+      {/* The band table — HR's, read from reward_bands, so the cash on each
+          role card and this page can never disagree. */}
+      {bandRows.length > 0 && (
+        <Card className="mt-3">
+          <p className="text-[13px] font-medium text-[var(--color-ink-2)]">How much each role pays</p>
+          <p className="mt-1 mb-4 text-[13px] leading-relaxed text-[var(--color-ink-3)]">
+            The cash follows the role&apos;s band. Every open role shows its figure on the card, and
+            the amount is locked in the moment you refer.
+          </p>
+          <div className="-mx-5 overflow-x-auto px-5">
+            <table className="w-full min-w-[520px] text-left text-[13.5px]">
+              <thead>
+                <tr className="border-b border-[var(--color-line)] text-[12px] text-[var(--color-ink-3)]">
+                  <th scope="col" className="py-2 pr-3 font-medium">Band</th>
+                  <th scope="col" className="py-2 pr-3 font-medium">Engineering</th>
+                  <th scope="col" className="py-2 pr-3 text-right font-medium">Cash up to</th>
+                  <th scope="col" className="py-2 pr-3 pl-4 font-medium">Non-engineering</th>
+                  <th scope="col" className="py-2 text-right font-medium">Cash up to</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bandRows.map((r) => (
+                  <tr key={r.band} className="border-b border-[var(--color-line)] last:border-0">
+                    <th scope="row" className="py-2.5 pr-3 font-semibold">{r.band}</th>
+                    <td className="py-2.5 pr-3 text-[var(--color-ink-2)]">{r.eng?.designation ?? "—"}</td>
+                    <BandCash b={r.eng} />
+                    <td className="py-2.5 pr-3 pl-4 text-[var(--color-ink-2)]">{r.non?.designation ?? "—"}</td>
+                    <BandCash b={r.non} />
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
       {/* Policy framework */}
       <Card className="mt-3">
         <p className="mb-4 text-[13px] font-medium text-[var(--color-ink-2)]">
@@ -113,5 +178,14 @@ export default async function HowToReferPage() {
         </p>
       </Card>
     </>
+  );
+}
+
+function BandCash({ b }: { b?: { amount: number; needs_clarification: boolean } }) {
+  if (!b) return <td className="py-2.5 text-right text-[var(--color-ink-3)]">—</td>;
+  return b.needs_clarification ? (
+    <td className="py-2.5 text-right text-[12.5px] text-[var(--color-ink-3)]">To be confirmed</td>
+  ) : (
+    <td className="py-2.5 text-right font-semibold text-[var(--color-gold)] tabular-nums">{rupees(b.amount)}</td>
   );
 }

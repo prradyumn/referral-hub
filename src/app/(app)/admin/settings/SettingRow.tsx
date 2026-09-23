@@ -1,5 +1,6 @@
 "use client";
 
+import { useToastResult } from "@/components/Toast";
 import { useActionState } from "react";
 import { saveSetting, type SettingsState } from "./actions";
 
@@ -14,6 +15,7 @@ export type Spec = {
 
 export default function SettingRow({ spec, value }: { spec: Spec; value: string }) {
   const [state, action, pending] = useActionState(saveSetting, initial);
+  useToastResult(state);
   const on = value.trim().toLowerCase() === "true";
 
   return (

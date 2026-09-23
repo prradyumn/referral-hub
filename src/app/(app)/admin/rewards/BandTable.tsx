@@ -1,5 +1,6 @@
 "use client";
 
+import { useToastResult } from "@/components/Toast";
 import { useActionState } from "react";
 import { setBandAmount, confirmSuggestedBands, type RewardState } from "./actions";
 
@@ -17,6 +18,7 @@ const initial: RewardState = { status: "idle" };
 
 function Row({ r }: { r: BandRow }) {
   const [state, action, pending] = useActionState(setBandAmount, initial);
+  useToastResult(state);
   return (
     <form
       action={action}
@@ -99,6 +101,7 @@ export default function BandTable({ rows }: { rows: BandRow[] }) {
 
 export function ConfirmSuggested({ count }: { count: number }) {
   const [state, action, pending] = useActionState(async () => confirmSuggestedBands(), initial);
+  useToastResult(state);
   return (
     <form action={action} className="flex flex-wrap items-center gap-3">
       <button type="submit" disabled={pending || count === 0} className="btn-primary">

@@ -3,6 +3,7 @@ import { query } from "@/lib/db";
 import { currentEmployee, requireSignedInUser } from "@/lib/employees";
 import { rewardLabel, shortDate, initials } from "@/lib/format";
 import { Card, PageHead } from "@/components/Chrome";
+import ReferralProgress, { CLOSED, stepOf } from "@/components/ReferralProgress";
 
 type Row = {
   id: string;
@@ -11,12 +12,19 @@ type Row = {
   current_stage: string | null;
   current_stage_at: string | null;
   submitted_at: string;
+  joined_at: string | null;
+  with_ta: boolean;
+  reward_status: string | null;
+  eligible_from: string | null;
+  paid_at: string | null;
+  eligibility_days_snapshot: number;
   reward_amount_snapshot: number;
   reward_confirmed_snapshot: boolean;
   candidate_name: string | null;
   job_title: string | null;
   job_location: string | null;
   stage_count: number;
+  wordings: string[];
 };
 
 export default async function ReferralsPage() {
@@ -34,16 +42,29 @@ export default async function ReferralsPage() {
       // to notice if it ever goes missing — run it when this file changes.
       rows = await query<Row>(
         `select r.id, r.ref_code, r.status, r.current_stage, r.current_stage_at,
-                r.submitted_at, r.reward_amount_snapshot,
+                r.submitted_at, r.reward_amount_snapshot, r.joined_at,
+                r.eligibility_days_snapshot,
+                (r.keka_candidate_id is not null or r.ta_added_at is not null) as with_ta,
+                w.status as reward_status, w.eligible_from, w.paid_at,
                 r.reward_confirmed_snapshot,
                 c.full_name as candidate_name,
                 j.title     as job_title,
                 j.location  as job_location,
-                (select count(*) from referral_stages s where s.referral_id = r.id)
-                            as stage_count
+                -- ::int: count() is bigint, which node-postgres returns as a
+                -- string, so "=== 1" never matched and it read "1 updates".
+                (select count(*)::int from referral_stages s where s.referral_id = r.id)
+                            as stage_count,
+                -- Every visible stage reached, so a closed referral can show
+                -- how far it got.
+                array(select m.employee_wording
+                        from referral_stages s
+                        join keka_stage_map m on m.keka_stage_id = s.stage
+                       where s.referral_id = r.id and m.is_visible)
+                            as wordings
            from referrals r
            join candidates c on c.id = r.candidate_id
            join jobs       j on j.id = r.job_id
+           left join referral_rewards w on w.referral_id = r.id
           where r.referrer_id = $1
           order by r.submitted_at desc`,
         [employee.id],
@@ -108,19 +129,6 @@ export default async function ReferralsPage() {
                   </p>
                 </div>
                 <div className="text-right">
-                  {/* current_stage is set only from a stage the stage map marks
-                      visible, so an unrecognised ATS stage shows the neutral
-                      fallback rather than a guess. */}
-                  <span className="pill bg-[var(--color-brand-soft)] text-[var(--color-brand)]">
-                    {r.current_stage ?? "Referral submitted"}
-                  </span>
-                  <p className="mt-1.5 text-[12.5px] text-[var(--color-ink-3)]">
-                    {r.current_stage_at
-                      ? `Updated ${shortDate(r.current_stage_at)}`
-                      : `Referred ${shortDate(r.submitted_at)}`}
-                  </p>
-                </div>
-                <div className="text-right">
                   <p
                     className={
                       r.reward_confirmed_snapshot
@@ -131,14 +139,37 @@ export default async function ReferralsPage() {
                     {rewardLabel(r.reward_amount_snapshot, r.reward_confirmed_snapshot)}
                   </p>
                   <p className="text-[12.5px] text-[var(--color-ink-3)]">
-                    {r.reward_confirmed_snapshot ? "if they join" : "reward"}
+                    {r.joined_at ? "your reward" : r.reward_confirmed_snapshot ? "if they join" : "reward"}
                   </p>
                 </div>
               </div>
 
-              <div className="mt-4 flex items-center justify-between border-t border-[var(--color-line)] pt-3">
+              <div className="mt-5">
+                <ReferralProgress
+                  compact
+                  p={{
+                    current_stage: r.current_stage,
+                    current_stage_at: r.current_stage_at,
+                    submitted_at: r.submitted_at,
+                    joined_at: r.joined_at,
+                    with_ta: r.with_ta,
+                    reward_amount: r.reward_amount_snapshot,
+                    reward_confirmed: r.reward_confirmed_snapshot,
+                    reward_status: r.reward_status,
+                    eligible_from: r.eligible_from,
+                    eligibility_days: r.eligibility_days_snapshot,
+                    paid_at: r.paid_at,
+                    reached: Math.max(0, ...r.wordings.filter((w) => w !== CLOSED).map(stepOf)),
+                  }}
+                />
+              </div>
+
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t border-[var(--color-line)] pt-3">
                 <p className="text-[12.5px] text-[var(--color-ink-3)]">
-                  Referred {shortDate(r.submitted_at)} ·{" "}
+                  {r.current_stage_at
+                    ? `Updated ${shortDate(r.current_stage_at)}`
+                    : `Referred ${shortDate(r.submitted_at)}`}{" "}
+                  ·{" "}
                   {r.stage_count === 1 ? "1 update" : `${r.stage_count} updates`}
                 </p>
                 <Link
@@ -154,7 +185,7 @@ export default async function ReferralsPage() {
       )}
 
       <p className="mt-6 text-[13px] leading-relaxed text-[var(--color-ink-3)]">
-        Stages refresh from Keka every hour. Interview feedback and scores stay
+        Stages refresh from Keka once a day. Interview feedback and scores stay
         confidential and are never shown here.
       </p>
     </>

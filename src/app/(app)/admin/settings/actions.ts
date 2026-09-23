@@ -52,6 +52,6 @@ export async function saveSetting(
   revalidatePath("/roles");
   revalidatePath("/home");
   revalidatePath("/leaderboard");
-  revalidatePath("/home");
+  revalidatePath("/how-to-refer");
   return { status: "ok", message: `Saved.${extra}` };
 }

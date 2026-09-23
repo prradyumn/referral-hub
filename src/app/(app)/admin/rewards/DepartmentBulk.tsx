@@ -1,5 +1,6 @@
 "use client";
 
+import { useToastResult } from "@/components/Toast";
 import { useActionState } from "react";
 import { setDepartmentReward, type RewardState } from "./actions";
 
@@ -15,6 +16,7 @@ const initial: RewardState = { status: "idle" };
  */
 export default function DepartmentBulk({ departments }: { departments: string[] }) {
   const [state, action, pending] = useActionState(setDepartmentReward, initial);
+  useToastResult(state);
 
   return (
     <form action={action} className="card mb-4 flex flex-wrap items-end gap-3 p-4">

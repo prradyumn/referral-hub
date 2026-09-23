@@ -5,6 +5,7 @@ import { currentEmployee, requireSignedInUser } from "@/lib/employees";
 import { visibleJourney } from "@/lib/keka/stages";
 import { rewardLabel, shortDate } from "@/lib/format";
 import { Card, PageHead } from "@/components/Chrome";
+import ReferralProgress, { CLOSED, stepOf } from "@/components/ReferralProgress";
 
 type Detail = {
   id: string;
@@ -13,6 +14,12 @@ type Detail = {
   submitted_at: string;
   valid_until: string;
   current_stage: string | null;
+  current_stage_at: string | null;
+  joined_at: string | null;
+  with_ta: boolean;
+  reward_status: string | null;
+  eligible_from: string | null;
+  paid_at: string | null;
   reward_amount_snapshot: number;
   eligibility_days_snapshot: number;
   reward_confirmed_snapshot: boolean;
@@ -42,7 +49,10 @@ export default async function ReferralDetailPage({
   // referral by guessing a URL. Never relax it to a lookup by id alone.
   const referral = await queryOne<Detail>(
     `select r.id, r.ref_code, r.relationship, r.submitted_at, r.valid_until,
-            r.current_stage, r.reward_amount_snapshot, r.eligibility_days_snapshot,
+            r.current_stage, r.current_stage_at, r.joined_at,
+            (r.keka_candidate_id is not null or r.ta_added_at is not null) as with_ta,
+            w.status as reward_status, w.eligible_from, w.paid_at,
+            r.reward_amount_snapshot, r.eligibility_days_snapshot,
             r.consent_text, r.consent_at,
             r.reward_confirmed_snapshot,
             c.full_name           as candidate_name,
@@ -54,6 +64,7 @@ export default async function ReferralDetailPage({
        from referrals r
        join candidates c on c.id = r.candidate_id
        join jobs       j on j.id = r.job_id
+       left join referral_rewards w on w.referral_id = r.id
       where r.id = $1
         and r.referrer_id = $2`,
     [id, employee.id],
@@ -64,6 +75,11 @@ export default async function ReferralDetailPage({
   if (!referral) notFound();
 
   const journey = await visibleJourney(referral.id);
+  // How far it got before it closed, so a closed referral still shows it.
+  const reached = Math.max(
+    0,
+    ...journey.filter((s) => s.wording && s.wording !== CLOSED).map((s) => stepOf(s.wording)),
+  );
 
   return (
     <>
@@ -79,9 +95,29 @@ export default async function ReferralDetailPage({
         lede={`${referral.job_title} · ${referral.job_department} · ${referral.job_location}`}
       />
 
+      <Card className="mb-4">
+        <h2 className="mb-4 text-[15px] font-semibold">Where they are</h2>
+        <ReferralProgress
+          p={{
+            current_stage: referral.current_stage,
+            current_stage_at: referral.current_stage_at,
+            submitted_at: referral.submitted_at,
+            joined_at: referral.joined_at,
+            with_ta: referral.with_ta,
+            reward_amount: referral.reward_amount_snapshot,
+            reward_confirmed: referral.reward_confirmed_snapshot,
+            reward_status: referral.reward_status,
+            eligible_from: referral.eligible_from,
+            eligibility_days: referral.eligibility_days_snapshot,
+            paid_at: referral.paid_at,
+            reached,
+          }}
+        />
+      </Card>
+
       <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
         <Card>
-          <h2 className="mb-1 text-[15px] font-semibold">Journey</h2>
+          <h2 className="mb-1 text-[15px] font-semibold">Every update</h2>
           <p className="mb-5 text-[13px] text-[var(--color-ink-3)]">
             Updated from Keka. Stages the recruitment team keeps internal are not shown.
           </p>
@@ -143,7 +179,7 @@ export default async function ReferralDetailPage({
             <h2 className="mb-3 text-[15px] font-semibold">Reward</h2>
             <dl className="grid gap-2.5 text-[13.5px]">
               <Row
-                k="If they join"
+                k={referral.joined_at ? "Your reward" : "If they join"}
                 v={rewardLabel(referral.reward_amount_snapshot, referral.reward_confirmed_snapshot)}
               />
               <Row

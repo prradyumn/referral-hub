@@ -6,6 +6,7 @@ import {
 import { points, rupees, shortDate, initials } from "@/lib/format";
 import { Card, PageHead, QuietLink, StatGroup } from "@/components/Chrome";
 import WelcomeGate, { type Tier } from "@/components/WelcomeGate";
+import FirstVisit, { type TopRole, type GiftTier } from "./FirstVisit";
 
 /**
  * Should the programme poster show?
@@ -94,6 +95,36 @@ export default async function HomePage() {
 
   const next = milestones.next;
   const pct = next ? Math.min(100, Math.round((milestones.points / next.threshold) * 100)) : 100;
+
+  // Nobody referred yet: show the offer and the way in, not nine zeros.
+  if (totals.referrals_made === 0) {
+    const [roles, gifts, [cash]] = await Promise.all([
+      query<TopRole>(
+        `select id, title, department, location, reward_amount
+           from jobs
+          where is_open and reward_confirmed
+          order by reward_amount desc, posted_on desc nulls last
+          limit 4`,
+      ),
+      query<GiftTier>(
+        `select name, threshold, art from milestone_tiers where is_active order by threshold`,
+      ),
+      query<{ max: number | null }>(
+        `select max(amount)::int as max from reward_bands where not needs_clarification`,
+      ),
+    ]);
+    return (
+      <>
+        {poster && <WelcomeGate tiers={poster.tiers} cashRange={poster.cashRange} />}
+        <FirstVisit
+          firstName={title.replace(/^Hello, /, "")}
+          maxCash={cash?.max ?? null}
+          roles={roles}
+          gifts={gifts}
+        />
+      </>
+    );
+  }
 
   return (
     <>

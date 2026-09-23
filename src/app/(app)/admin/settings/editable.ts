@@ -36,6 +36,17 @@ export const EDITABLE: Editable[] = [
         : 'Use exactly "every_visit" or "once".',
   },
   {
+    key: "howto_video_url",
+    label: "How to refer — walkthrough video",
+    help:
+      "An https link. Empty hides the video slot entirely, rather than showing " +
+      "employees a placeholder. A direct .mp4 or .webm file plays on the page; " +
+      "any other link (Drive, YouTube) opens in a new tab.",
+    kind: "text",
+    validate: (v) =>
+      v.trim() === "" || /^https:\/\/\S+$/.test(v.trim()) ? null : "Use an https:// link, or leave it empty.",
+  },
+  {
     key: "leaderboard_enabled",
     label: "Show the leaderboard to employees",
     help:

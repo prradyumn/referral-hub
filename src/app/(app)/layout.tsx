@@ -4,6 +4,8 @@ import { currentEmployee, requireSignedInUser } from "@/lib/employees";
 import { isAdmin } from "@/lib/admin";
 import { initials } from "@/lib/format";
 import { Wordmark } from "@/components/Logo";
+import { DesktopNav, MobileMore, MobileTabBar } from "@/components/AppNav";
+import { Toaster } from "@/components/Toast";
 
 const NAV = [
   { href: "/home", label: "Home" },
@@ -17,7 +19,7 @@ const NAV = [
 // One entry, not two. Two admin links pushed the header past its width and
 // the second label was truncated mid-word; the admin screens carry their own
 // sub-navigation instead.
-const ADMIN_NAV = [{ href: "/admin/rewards", label: "Admin" }];
+const ADMIN_NAV = [{ href: "/admin/inbox", label: "Admin" }];
 
 export default async function AppLayout({
   children,
@@ -25,10 +27,6 @@ export default async function AppLayout({
   // Session only for identity — the shell renders whether or not Postgres is up.
   const user = await requireSignedInUser();
 
-  // The admin link is hidden from everyone else, but hiding a link is not a
-  // permission: requireAdmin() in src/lib/admin.ts is what actually guards
-  // those routes. This just avoids showing a door that will not open.
-  // Failing closed keeps the header rendering when the database is down.
   // The admin link is hidden from everyone else, but hiding a link is not a
   // permission: requireAdmin() in src/lib/admin.ts is what actually guards
   // those routes. This just avoids showing a door that will not open.
@@ -56,25 +54,35 @@ export default async function AppLayout({
             <Wordmark />
           </Link>
 
-          {/* On mobile the nav takes its own full-width row underneath the
-              logo and scrolls horizontally; squeezing it onto the first row
-              truncated the labels to single letters. */}
-          <nav className="-mx-1 order-last flex w-full items-center gap-0.5 overflow-x-auto px-1 sm:order-none sm:w-auto sm:flex-1">
-            {[...NAV, ...(showAdmin ? ADMIN_NAV : [])].map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="whitespace-nowrap rounded-md px-2.5 py-1.5 text-[13.5px] text-[var(--color-ink-2)] transition hover:bg-[var(--color-brand-soft)] hover:text-[var(--color-brand)]"
-              >
-                {item.label}
-              </Link>
-            ))}
-          </nav>
+          <DesktopNav items={[...NAV, ...(showAdmin ? ADMIN_NAV : [])]} />
 
-          <div className="flex items-center gap-3">
+          <div className="ml-auto flex items-center gap-3 sm:ml-0">
             <Link href="/refer" className="btn-primary hidden !py-2 text-[13.5px] sm:inline-flex">
               Refer someone
             </Link>
+            {/* Phones get the pages the bottom bar has no room for here. */}
+            <MobileMore
+              items={[
+                { href: "/leaderboard", label: "Leaderboard" },
+                { href: "/how-to-refer", label: "How to refer" },
+                ...(showAdmin ? ADMIN_NAV : []),
+              ]}
+              signOut={
+                <form
+                  action={async () => {
+                    "use server";
+                    await signOut({ redirectTo: "/login" });
+                  }}
+                >
+                  <button
+                    type="submit"
+                    className="block w-full rounded-md px-3 py-2.5 text-left text-[14px] text-[var(--color-ink-2)] hover:bg-[var(--color-ground)]"
+                  >
+                    Sign out
+                  </button>
+                </form>
+              }
+            />
             <span
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--color-brand-soft)] text-[12px] font-semibold text-[var(--color-brand)]"
               title={user.email}
@@ -82,6 +90,7 @@ export default async function AppLayout({
               {initials(user.name)}
             </span>
             <form
+              className="hidden sm:block"
               action={async () => {
                 "use server";
                 await signOut({ redirectTo: "/login" });
@@ -98,8 +107,12 @@ export default async function AppLayout({
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-5 py-8">{children}</main>
+      {/* Bottom padding on phones so the tab bar never covers the end of a
+          page. */}
+      <main className="mx-auto max-w-6xl px-5 pt-8 pb-28 sm:pb-8">{children}</main>
 
+      <MobileTabBar />
+      <Toaster />
     </div>
   );
 }

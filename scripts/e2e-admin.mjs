@@ -22,7 +22,7 @@ const BASE = process.env.SHOOT_BASE ?? "http://localhost:3000";
 const COOKIE = "authjs.session-token";
 const ADMIN = `e2e_admin_${Date.now()}@convegenius.ai`;
 const PLAIN = `e2e_plain_${Date.now()}@convegenius.ai`;
-const ADMIN_ROUTES = ["/admin/rewards", "/admin/sync", "/admin/pipeline", "/admin/settings"];
+const ADMIN_ROUTES = ["/admin/inbox", "/admin/rewards", "/admin/sync", "/admin/pipeline", "/admin/settings"];
 
 const db = new pg.Client({
   connectionString: process.env.DATABASE_URL,
@@ -91,6 +91,12 @@ try {
     const p = await (await plainCtx.newPage()).goto(BASE + route);
     check(p.status() === 404, `ordinary employee is refused ${route} (${p.status()})`);
   }
+
+  // A loading.tsx above a route makes it stream, and a streamed notFound()
+  // goes out as "200 OK" with a 404 body. That happened once, at the (app)
+  // level; these catch it coming back on the one employee route that 404s.
+  const other = await (await plainCtx.newPage()).goto(BASE + "/referrals/00000000-0000-4000-8000-000000000000");
+  check(other.status() === 404, `a referral that is not yours answers 404 (${other.status()})`);
 
   // The nav must not advertise a door that will not open.
   const plainHome = await plainCtx.newPage();
