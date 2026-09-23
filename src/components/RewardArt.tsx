@@ -240,3 +240,68 @@ export function CoinStackArt({ className = "h-16 w-16" }: { className?: string }
     </svg>
   );
 }
+
+/**
+ * A vacation: sunset over the sea, a palm, a gentle swell.
+ *
+ * Drawn because no photograph was supplied for this tier, and sized for the
+ * same dark showcase stage as the product photos so it sits among them
+ * rather than looking like an icon. Swap for a photo by adding one to
+ * public/rewards/ and the PHOTO map in WelcomeGate.
+ */
+export function VacationArt({ className = "h-40 w-auto" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 200 170" className={className} aria-hidden="true">
+      <defs>
+        <linearGradient id="vac-sky" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#ff7a59" />
+          <stop offset=".55" stopColor="#ffb057" />
+          <stop offset="1" stopColor="#ffd98a" />
+        </linearGradient>
+        <linearGradient id="vac-sea" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#2f9d90" />
+          <stop offset="1" stopColor="#1d5f7a" />
+        </linearGradient>
+        <clipPath id="vac-clip">
+          <rect x="10" y="8" width="180" height="154" rx="26" />
+        </clipPath>
+      </defs>
+
+      <g clipPath="url(#vac-clip)">
+        <rect x="10" y="8" width="180" height="154" fill="url(#vac-sky)" />
+        <g className="vac-sun">
+          <circle cx="112" cy="86" r="30" fill="#fff4cc" opacity=".35" />
+          <circle cx="112" cy="86" r="21" fill="#fff1b8" />
+        </g>
+        <rect x="10" y="96" width="180" height="70" fill="url(#vac-sea)" />
+        <g className="vac-wave" stroke="#bfeee6" strokeWidth="2.2" strokeLinecap="round" fill="none" opacity=".75">
+          <path d="M22 110c10-4 18-4 28 0s18 4 28 0 18-4 28 0 18 4 28 0 18-4 28 0" />
+          <path d="M34 124c10-4 18-4 28 0s18 4 28 0 18-4 28 0 18 4 28 0" opacity=".6" />
+        </g>
+        <path d="M10 140c40-14 88-16 120-6 22 7 44 8 60 4v30H10z" fill="#f6d9a1" />
+        {/* Palm */}
+        <path d="M58 142c2-26 6-50 18-70" fill="none" stroke="#6b4b2a" strokeWidth="5" strokeLinecap="round" />
+        <g className="vac-palm" style={{ transformOrigin: "76px 72px" }} fill="#1f7a5a">
+          <path d="M76 72c-14-8-30-8-42 2 14-2 28 0 42-2z" />
+          <path d="M76 72c-6-14-18-22-32-22 12 6 22 14 32 22z" />
+          <path d="M76 72c4-14 16-24 30-26-10 8-20 16-30 26z" />
+          <path d="M76 72c14-6 30-4 42 6-14-2-28-4-42-6z" />
+          <path d="M76 72c10 6 16 16 16 30-6-10-12-20-16-30z" />
+        </g>
+        <circle cx="74" cy="76" r="3" fill="#6b4b2a" />
+      </g>
+
+      <style>{`
+        .vac-wave { animation: vacWave 3.2s ease-in-out infinite; }
+        @keyframes vacWave { 0%,100% { transform: translateX(0); } 50% { transform: translateX(-6px); } }
+        .vac-palm { animation: vacPalm 4.5s ease-in-out infinite; }
+        @keyframes vacPalm { 0%,100% { transform: rotate(-2.5deg); } 50% { transform: rotate(2.5deg); } }
+        .vac-sun { animation: vacSun 4s ease-in-out infinite; transform-origin: 112px 86px; }
+        @keyframes vacSun { 0%,100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+        @media (prefers-reduced-motion: reduce) {
+          .vac-wave, .vac-palm, .vac-sun { animation: none; }
+        }
+      `}</style>
+    </svg>
+  );
+}

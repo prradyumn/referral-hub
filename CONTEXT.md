@@ -1587,3 +1587,52 @@ state does not exist.
 | `Hired` used whenever someone joins | It is what creates the reward | Used — 20 seen |
 | Rejected candidates archived, not left on their last stage | Otherwise the referral never closes | Archiving is in use |
 | API key with employee records (HRIS) | True joining date; still employed on day 30 | Refused (403) |
+
+---
+
+## 23. Reward bands and point-based gifts
+
+Supplied by HR 23 Sep 2026.
+
+**Cash reward by band.** `reward_bands` holds HR's table — B1 to B8+, separately for
+Engineering (₹15,000–₹1,80,000) and Non-Engineering (₹10,000–₹1,20,000). It is editable
+at `/admin/rewards`; saving a row re-prices every role following it, and referrals already
+made keep their snapshot (convention 3).
+
+**Keka has no band on a job**, so `src/lib/bands.ts` works it out. The title comes first:
+a designation from the table (SDE 2, AVP, Sr Manager, Manager, Associate, Fellow…) sets the
+band. Where the title names none, the minimum experience the role asks for sets it. Both
+are applied — HR's instruction was to pay band-wise where the role isn't specified — and
+`jobs.band_source` records which, so HR can see and move the inferred ones.
+`app_settings.auto_apply_experience_bands = false` turns inference back into a suggestion
+that stays "To be confirmed" until confirmed. Engineering vs Non-Engineering comes from the
+department (Technology, AI Platform) or engineering words in the title — "Data Engineer"
+sits in Pods.
+
+It runs after every jobs sync (`src/lib/band-apply.ts`, one batched call), so a new Keka
+role is banded and priced without anyone acting. A role HR banded by hand (`band_source =
+'hr'`) or priced by hand (`reward_origin = 'custom'`) is never touched again.
+
+On 23 Sep: 56 open roles — 27 banded from the title, 29 from experience, **48 paying**.
+**8 held**: the Non-Engineering B1 row reads "2000 + 5000", which could be a split payment
+or a figure per designation. It is `needs_clarification`, and its roles (7 Fellows, one
+intern) show "To be confirmed" until HR saves a single amount on that row.
+
+Two roles priced by hand before the table existed (AVP – Strategic Alliances at ₹0, SDE 2
+at ₹15,000) were moved onto the table when it was applied.
+
+**Recommended to TA:** add a required "Band" field to Keka requisitions. The inference
+would then disappear.
+
+**Gifts are on reward points** — one point per rupee of referral reward, counted on
+referrals that joined and only on agreed amounts. Smartwatch 1,00,000 · smartphone
+2,00,000 · vacation 3,50,000 · Harley 4,00,000. `milestone_tiers.art` keys the artwork, so
+renaming a tier or changing its threshold cannot drop the picture. The vacation tier has a
+drawn illustration until a photo is supplied.
+
+**The poster** flips biggest first and now has arrows, clickable dots, swipe and the arrow
+keys; using any of them pauses the autoplay for 9s. It fits without scrolling on every
+laptop size checked and on a 390px phone.
+
+`npm run e2e:bands` covers all of it — 16 checks. `npm run keka:check` has 16 classifier
+assertions pinned to real tenant titles.

@@ -31,3 +31,8 @@ export function initials(name: string): string {
 export function rewardLabel(amount: number, confirmed: boolean): string {
   return confirmed ? rupees(amount) : "To be confirmed";
 }
+
+/** Reward points, grouped the Indian way: 1,00,000 rather than 100,000. */
+export function points(n: number): string {
+  return `${Math.round(n).toLocaleString("en-IN")} points`;
+}

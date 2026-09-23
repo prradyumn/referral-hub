@@ -3,7 +3,7 @@ import { currentEmployee, requireSignedInUser } from "@/lib/employees";
 import {
   employeeRewards, rewardTotals, milestoneProgress, describeReward,
 } from "@/lib/rewards";
-import { rupees, shortDate } from "@/lib/format";
+import { points, rupees, shortDate } from "@/lib/format";
 import { PageHead, Card } from "@/components/Chrome";
 
 export default async function RewardsPage() {
@@ -57,12 +57,12 @@ export default async function RewardsPage() {
       <Card className="mb-6">
         <h2 className="mb-1 text-[15px] font-semibold">Milestone gifts</h2>
         <p className="mb-4 text-[13px] text-[var(--color-ink-3)]">
-          {milestones.joined === 0
-            ? "Counted on referrals who join, not referrals made."
-            : `${milestones.joined} ${milestones.joined === 1 ? "person has" : "people have"} joined through you.`}
+          {milestones.points === 0
+            ? "One reward point for every rupee you earn on a referral who joins."
+            : `You have ${points(milestones.points)} from ${milestones.joined} ${milestones.joined === 1 ? "person" : "people"} who joined through you.`}
         </p>
 
-        <ul className="grid gap-2 sm:grid-cols-3">
+        <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           {milestones.tiers.map((t) => (
             <li
               key={t.name}
@@ -74,14 +74,14 @@ export default async function RewardsPage() {
             >
               <p className="text-[14px] font-medium">{t.name}</p>
               <p className="text-[12.5px] text-[var(--color-ink-3)]">
-                {t.threshold} {t.threshold === 1 ? "referral joins" : "referrals join"}
+                {points(t.threshold)}
               </p>
               <p className="mt-1.5 text-[12px] font-medium">
                 {t.unlocked ? (
                   <span className="text-[var(--color-good)]">Unlocked</span>
                 ) : (
                   <span className="text-[var(--color-ink-3)]">
-                    {t.threshold - milestones.joined} to go
+                    {points(t.threshold - milestones.points)} to go
                   </span>
                 )}
               </p>

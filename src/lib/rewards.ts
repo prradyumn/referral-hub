@@ -139,40 +139,55 @@ export async function rewardTotals(employeeId: string): Promise<RewardTotals> {
 // ------------------------------------------------------------ milestones
 export type MilestoneProgress = {
   name: string;
+  /** In reward points. */
   threshold: number;
   blurb: string | null;
+  art: string | null;
   unlocked: boolean;
 };
 
 /**
- * Milestone tiers and whether this employee has reached them.
+ * Gift tiers and whether this employee has reached them.
  *
- * Counted on referrals that actually joined — a milestone is for people
- * brought in, not forms filled. D12 (lifetime or per financial year) is
- * unanswered; `app_settings.milestone_scope` records that this is built as
+ * Tiers are reward-point thresholds (HR, 23 Sep 2026): smartwatch at
+ * 1,00,000, smartphone at 2,00,000, vacation at 3,50,000, Harley at
+ * 4,00,000. **One point per rupee of referral reward**, counted on referrals
+ * that actually joined — a gift is for people brought in, not forms filled.
+ *
+ * Only agreed amounts count. A referral made while its role had no confirmed
+ * reward carries a placeholder figure, and totting that up would unlock a
+ * gift on a number nobody decided. D12 (lifetime or per financial year) is
+ * still open; `app_settings.milestone_scope` records the built default,
  * lifetime.
  */
-export async function milestoneProgress(
-  employeeId: string,
-): Promise<{ joined: number; tiers: MilestoneProgress[]; next: MilestoneProgress | null }> {
-  const tiers = await query<MilestoneProgress & { joined: number }>(
+export async function milestoneProgress(employeeId: string): Promise<{
+  points: number;
+  joined: number;
+  tiers: MilestoneProgress[];
+  next: MilestoneProgress | null;
+}> {
+  const tiers = await query<MilestoneProgress & { points: number; joined: number }>(
     `with mine as (
-       select count(*)::int as joined
+       select coalesce(sum(reward_amount_snapshot) filter (
+                where reward_confirmed_snapshot), 0)::int as points,
+              count(*)::int as joined
          from referrals
         where referrer_id = $1 and joined_at is not null
      )
-     select t.name, t.threshold, t.blurb,
-            (select joined from mine) >= t.threshold as unlocked,
+     select t.name, t.threshold, t.blurb, t.art,
+            (select points from mine) >= t.threshold as unlocked,
+            (select points from mine) as points,
             (select joined from mine) as joined
        from milestone_tiers t
       where t.is_active
-      order by t.sort_order, t.threshold`,
+      order by t.threshold, t.sort_order`,
     [employeeId],
   );
 
+  const points = tiers[0]?.points ?? 0;
   const joined = tiers[0]?.joined ?? 0;
   const next = tiers.find((t) => !t.unlocked) ?? null;
-  return { joined, tiers, next };
+  return { points, joined, tiers, next };
 }
 
 // ----------------------------------------------------------- leaderboard

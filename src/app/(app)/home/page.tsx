@@ -3,7 +3,7 @@ import { query } from "@/lib/db";
 import {
   rewardTotals, milestoneProgress, leaderboard, leaderboardEnabled,
 } from "@/lib/rewards";
-import { rupees, shortDate, initials } from "@/lib/format";
+import { points, rupees, shortDate, initials } from "@/lib/format";
 import { Card, PageHead, QuietLink, StatGroup } from "@/components/Chrome";
 import WelcomeGate, { type Tier } from "@/components/WelcomeGate";
 
@@ -15,19 +15,27 @@ import WelcomeGate, { type Tier } from "@/components/WelcomeGate";
  * employee row. Which of the two applies is HR's call, not the component's,
  * so it lives in app_settings (convention 2).
  */
-async function posterFor(employeeId: string, ackAt: string | null) {
+async function posterFor(ackAt: string | null) {
   const [mode] = await query<{ value: string }>(
     `select value from app_settings where key = 'welcome_poster_mode'`,
   );
   const everyVisit = (mode?.value ?? "every_visit").trim() !== "once";
   if (!everyVisit && ackAt !== null) return null;
 
-  const tiers = await query<Tier>(
-    `select name, threshold, blurb from milestone_tiers
-      where is_active order by sort_order, threshold`,
-  );
-  void employeeId;
-  return tiers.length ? tiers : null;
+  const [tiers, [range]] = await Promise.all([
+    query<Tier>(
+      `select name, threshold, blurb, art from milestone_tiers
+        where is_active order by threshold, sort_order`,
+    ),
+    // The spread of the band table, so the poster's cash line is HR's real
+    // range rather than a number typed into the component.
+    query<{ min: number; max: number }>(
+      `select min(amount)::int as min, max(amount)::int as max
+         from reward_bands where not needs_clarification`,
+    ),
+  ]);
+  if (!tiers.length) return null;
+  return { tiers, cashRange: range?.max ? range : null };
 }
 
 /** The most recent thing that actually happened to one of your referrals. */
@@ -75,21 +83,21 @@ export default async function HomePage() {
     );
   }
 
-  const [totals, milestones, latest, boardOn, posterTiers] = await Promise.all([
+  const [totals, milestones, latest, boardOn, poster] = await Promise.all([
     rewardTotals(employee.id),
     milestoneProgress(employee.id),
     latestUpdate(employee.id),
     leaderboardEnabled(),
-    posterFor(employee.id, employee.welcome_ack_at),
+    posterFor(employee.welcome_ack_at),
   ]);
   const top3 = boardOn ? await leaderboard("monthly", 3) : [];
 
   const next = milestones.next;
-  const pct = next ? Math.min(100, Math.round((milestones.joined / next.threshold) * 100)) : 100;
+  const pct = next ? Math.min(100, Math.round((milestones.points / next.threshold) * 100)) : 100;
 
   return (
     <>
-      {posterTiers && <WelcomeGate tiers={posterTiers} />}
+      {poster && <WelcomeGate tiers={poster.tiers} cashRange={poster.cashRange} />}
 
       <PageHead title={title} lede="Where your referrals have reached, and what they are worth." />
 
@@ -176,10 +184,10 @@ export default async function HomePage() {
               <div
                 className="mt-4 h-2 overflow-hidden rounded-full bg-[var(--color-ground)]"
                 role="progressbar"
-                aria-valuenow={milestones.joined}
+                aria-valuenow={milestones.points}
                 aria-valuemin={0}
                 aria-valuemax={next.threshold}
-                aria-label={`${milestones.joined} of ${next.threshold} joined`}
+                aria-label={`${points(milestones.points)} of ${points(next.threshold)}`}
               >
                 <div
                   className="h-full rounded-full bg-[var(--color-mint)] transition-[width] duration-700"
@@ -187,12 +195,12 @@ export default async function HomePage() {
                 />
               </div>
               <p className="mt-2 text-[12.5px] text-[var(--color-ink-3)]">
-                {milestones.joined} of {next.threshold} joined
+                {points(milestones.points)} of {points(next.threshold)}
               </p>
             </>
           ) : (
             <p className="text-[14px] leading-relaxed text-[var(--color-ink-2)]">
-              Every milestone unlocked. That is {milestones.joined} people brought in.
+              Every gift unlocked — {points(milestones.points)} earned.
             </p>
           )}
 

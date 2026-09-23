@@ -55,6 +55,9 @@ export async function setReward(
     [jobId, reward, eligibilityDays, priority],
   );
 
+  // A figure typed for this role wins over the band table from now on.
+  await query(`update jobs set reward_origin = 'custom' where id = $1`, [jobId]);
+
   const settled = Number(row?.referrals_settled ?? 0);
 
   revalidatePath("/admin/rewards");
@@ -95,6 +98,7 @@ export async function setDepartmentReward(
   for (const t of targets) {
     await query(`select set_job_reward($1, $2, $3, $4)`,
       [t.id, reward, t.eligibility_days, t.is_priority]);
+    await query(`update jobs set reward_origin = 'custom' where id = $1`, [t.id]);
   }
   const rows = targets;
 
@@ -105,4 +109,104 @@ export async function setDepartmentReward(
     status: "ok",
     message: `Set the reward on ${rows.length} role${rows.length === 1 ? "" : "s"} in ${department}.`,
   };
+}
+
+// ------------------------------------------------------------------ bands
+const TRACKS = ["engineering", "non_engineering"] as const;
+const BANDS = ["B1", "B2", "B3", "B4", "B5", "B6", "B7", "B8+"] as const;
+
+const bandSchema = z.object({
+  jobId: z.string().uuid(),
+  choice: z
+    .string()
+    .regex(/^(engineering|non_engineering):(B[1-7]|B8\+)$/, "Choose a band."),
+});
+
+/**
+ * HR places a role in a band. The role then takes the band's reward, and a
+ * later sync will not re-band it — HR's decision beats the inference.
+ */
+export async function setBand(_prev: RewardState, formData: FormData): Promise<RewardState> {
+  await requireAdmin();
+  const parsed = bandSchema.safeParse({
+    jobId: formData.get("jobId"),
+    choice: formData.get("choice"),
+  });
+  if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message };
+
+  const [track, band] = parsed.data.choice.split(":") as [(typeof TRACKS)[number], (typeof BANDS)[number]];
+  try {
+    const [row] = await query<{ amount: number }>(`select set_job_band($1, $2, $3) as amount`, [
+      parsed.data.jobId,
+      track,
+      band,
+    ]);
+    revalidatePath("/admin/rewards");
+    revalidatePath("/roles");
+    return {
+      status: "ok",
+      message: `Band ${band} applied — ₹${Number(row?.amount ?? 0).toLocaleString("en-IN")}.`,
+    };
+  } catch (e) {
+    return { status: "error", message: e instanceof Error ? e.message : "Could not set the band." };
+  }
+}
+
+/**
+ * Accept every band suggested from experience, in one go.
+ *
+ * Suggestions are held back from employees until a person has looked at
+ * them. This is that look, done in bulk once HR is satisfied with the list.
+ * Bands still awaiting clarification are skipped.
+ */
+export async function confirmSuggestedBands(): Promise<RewardState> {
+  await requireAdmin();
+  const rows = await query<{ id: string; track: string; band: string }>(
+    `select j.id, j.track, j.band
+       from jobs j
+       join reward_bands b on b.track = j.track and b.band = j.band
+      where j.is_open and j.band_source = 'experience'
+        and j.reward_origin = 'band' and not j.reward_confirmed
+        and not b.needs_clarification`,
+  );
+  for (const r of rows) {
+    await query(`select set_job_band($1, $2, $3)`, [r.id, r.track, r.band]);
+  }
+  revalidatePath("/admin/rewards");
+  revalidatePath("/roles");
+  return { status: "ok", message: `Confirmed ${rows.length} suggested band${rows.length === 1 ? "" : "s"}.` };
+}
+
+const amountSchema = z.object({
+  track: z.enum(TRACKS),
+  band: z.enum(BANDS),
+  amount: z.coerce.number().int().min(0).max(10_000_000),
+  label: z.string().max(60).optional(),
+});
+
+/**
+ * HR edits a row of the band table. Every role following that band is
+ * re-priced; referrals already made keep what they were promised.
+ */
+export async function setBandAmount(_prev: RewardState, formData: FormData): Promise<RewardState> {
+  await requireAdmin();
+  const parsed = amountSchema.safeParse({
+    track: formData.get("track"),
+    band: formData.get("band"),
+    amount: formData.get("amount"),
+    label: formData.get("label") ?? "",
+  });
+  if (!parsed.success) return { status: "error", message: parsed.error.issues[0]?.message };
+  const { track, band, amount, label } = parsed.data;
+
+  const [row] = await query<{ n: number }>(`select set_band_amount($1, $2, $3, $4) as n`, [
+    track,
+    band,
+    amount,
+    label ?? "",
+  ]);
+  revalidatePath("/admin/rewards");
+  revalidatePath("/roles");
+  const n = Number(row?.n ?? 0);
+  return { status: "ok", message: `Saved. ${n} role${n === 1 ? "" : "s"} re-priced.` };
 }

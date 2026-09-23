@@ -18,6 +18,7 @@ import { sweepPendingPushes, pushEnabled } from "@/lib/keka/candidates";
 import { syncReferralStages } from "@/lib/keka/stages";
 import { recordedSync } from "@/lib/keka/sync";
 import { query } from "@/lib/db";
+import { applyBands, type BandApplyResult } from "@/lib/band-apply";
 import { isKekaConfigured } from "@/lib/keka/client";
 
 // pg does not run on the edge, and neither does this.
@@ -101,6 +102,19 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // ---- reward bands ------------------------------------------------------
+  // After the jobs sync, so a role that just arrived from Keka is banded and
+  // priced in the same run.
+  let bands: BandApplyResult | null = null;
+  let bandError: string | null = null;
+  if (!jobs.error) {
+    try {
+      bands = await applyBands();
+    } catch (e) {
+      bandError = e instanceof Error ? e.message : String(e);
+    }
+  }
+
   // ---- candidate stages -------------------------------------------------
   // Only polls jobs the Hub has referrals against, so this costs nothing
   // until someone has actually referred a person.
@@ -143,7 +157,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const ok = !jobs.error && !stages.error && !reconcileError && !pushError && !rewardError;
+  const ok = !jobs.error && !bandError && !stages.error && !reconcileError && !pushError && !rewardError;
 
   return NextResponse.json(
     {
@@ -157,6 +171,7 @@ export async function GET(request: NextRequest) {
         detail: jobs.result ? (jobs.result as { detail: unknown }).detail : null,
         error: jobs.error?.message ?? null,
       },
+      bands: bands ?? (bandError ? { error: bandError } : null),
       stages: {
         status: stages.run.status,
         detail: stages.result ? (stages.result as { detail: unknown }).detail : null,

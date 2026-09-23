@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireSignedInUser } from "@/lib/employees";
 import { howToSteps, policyPoints } from "@/lib/showcase";
 import { query } from "@/lib/db";
+import { points } from "@/lib/format";
 import { Card, PageHead } from "@/components/Chrome";
 
 export default async function HowToReferPage() {
@@ -79,7 +80,7 @@ export default async function HowToReferPage() {
                 <li key={b.name} className="flex items-baseline justify-between gap-3">
                   <span className="text-[14px] font-medium">{b.name}</span>
                   <span className="text-[12.5px] whitespace-nowrap text-[var(--color-mint)]">
-                    {b.threshold} {b.threshold === 1 ? "referral joins" : "referrals join"}
+                    {points(b.threshold)}
                   </span>
                 </li>
               ))}

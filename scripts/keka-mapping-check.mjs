@@ -17,6 +17,7 @@ import {
   splitName, splitPhone, candidateBody, attributionNote, extractCandidateId,
   stripBoilerplate,
 } from "../src/lib/keka/map.ts";
+import { classifyRole, minYears, bandFromExperience } from "../src/lib/bands.ts";
 
 let passed = 0;
 let failed = 0;
@@ -95,6 +96,49 @@ check("empty and undefined are null, not empty string", () => {
   assert.equal(summaryText(undefined), null);
   assert.equal(summaryText("   "), null);
   assert.equal(summaryText("<p></p>"), null);
+});
+
+console.log("\nreward bands — titles from the live tenant");
+const band = (t, d, e) => { const c = classifyRole(t, d, e); return `${c.band}/${c.track === "engineering" ? "eng" : "non"}/${c.source}`; };
+check("SDE 2 is Engineering B3 from the title", () =>
+  assert.equal(band("Software Development Engineer 2 (SDE 2)", "AI Platform", "1-3 yrs"), "B3/eng/title"));
+check("\"AI Engineer - 2\" reads as SDE 2", () =>
+  assert.equal(band("AI Engineer - 2", "Technology", "1 - 3 Years"), "B3/eng/title"));
+check("AVP is B7, not caught as VP", () =>
+  assert.equal(band("AVP - Strategic Alliances", "Business Development", "8 yrs"), "B7/non/title"));
+check("\"Assistant Vice President\" is B7, not B8+", () =>
+  assert.equal(band("Assistant Vice President - Strategic Alliances", "Business Development", "10 yrs"), "B7/non/title"));
+check("a plain VP is B8+", () =>
+  assert.equal(band("VP - Programs", "Programs", "15 yrs"), "B8+/non/title"));
+check("Sr Manager is B6 before plain Manager can catch it", () =>
+  assert.equal(band("Sr. Manager - Strategic Alliances", "Business Development", "7 yrs"), "B6/non/title"));
+check("Program Manager is B5", () =>
+  assert.equal(band("Program Manager", "Programs", "3 yrs"), "B5/non/title"));
+check("Assistant Manager is B4, not Manager", () =>
+  assert.equal(band("Assistant Manager - Finance", "Finance", "3 yrs"), "B4/non/title"));
+check("Associate is B2, Sr Associate B3, Jr Associate B1", () => {
+  assert.equal(band("Associate - Operations", "Shared Services", "1-2 yrs"), "B2/non/title");
+  assert.equal(band("Sr Associate - Finance", "Finance", "3 yrs"), "B3/non/title");
+  assert.equal(band("Jr Associate", "Programs", "0-1 yrs"), "B1/non/title");
+});
+check("Fellows are Non-Engineering B1", () =>
+  assert.equal(band("Fellows", "Programs", "1-3 yrs"), "B1/non/title"));
+check("a Data Engineer outside Technology is still Engineering", () =>
+  assert.equal(band("Data Engineer", "Pods", "2-3 yrs").split("/")[1], "eng"));
+check("a Legal Associate is not Engineering", () =>
+  assert.equal(band("Legal Associate", "Finance", "2-4 years"), "B2/non/title"));
+check("a title with no designation falls back to experience, marked as such", () =>
+  assert.equal(band("DevOps Lead", "Technology", "7-10 Years"), "B5/eng/experience"));
+check("interns are only ever suggested, never applied", () =>
+  assert.equal(band("Intern - Quality and Testing", "Technology", "0 - 6 months").split("/")[2], "experience"));
+check("experience never infers the top band", () =>
+  assert.notEqual(bandFromExperience(30), "B8+"));
+check("experience strings parse", () => {
+  assert.equal(minYears("5+ years"), 5);
+  assert.equal(minYears("3 to 6 Years"), 3);
+  assert.equal(minYears("0 - 6 months"), 0);
+  assert.equal(minYears("6 months"), 0.5);
+  assert.equal(minYears(""), null);
 });
 
 console.log("\nKeka date parsing (epoch seconds in a string — real tenant format)");

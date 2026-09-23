@@ -27,23 +27,9 @@ export const IS_SHOWCASE = true;
 // copy awaiting HR sign-off rather than numbers pretending to be data.
 
 // ------------------------------------------------------------- benefits
-export const benefits = [
-  {
-    name: "Smartwatch",
-    at: "1 referral joins",
-    blurb: "Your first successful referral earns a smartwatch alongside the cash reward.",
-  },
-  {
-    name: "Smartphone",
-    at: "3 referrals join",
-    blurb: "Three people you brought in, still with us past their first month.",
-  },
-  {
-    name: "Harley ride experience",
-    at: "6 referrals join",
-    blurb: "The one people talk about. Six joiners in a financial year.",
-  },
-];
+// REMOVED 23 Sep 2026. The gift ladder lives in milestone_tiers and is read
+// from there by /rewards, /home, /how-to-refer and the poster; it is now in
+// reward points rather than referral counts.
 
 // ----------------------------------------------------------- how to refer
 export const howToSteps = [
