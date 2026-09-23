@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { acknowledgeWelcome } from "@/app/(app)/welcome-actions";
-import { CashRain, CoinStackArt, VacationArt, WatchArt, PhoneArt, BikeArt } from "@/components/RewardArt";
+import { CashRain, VacationArt, WatchArt, PhoneArt, BikeArt } from "@/components/RewardArt";
 
 export type Tier = {
   name: string;
@@ -250,6 +250,26 @@ export default function WelcomeGate({
             >
               Refer someone good. Get paid for it.
             </h2>
+
+            {/* The headline number. Gold on the indigo hero is the strongest
+                contrast on the poster, which is where the one figure that
+                makes someone act belongs. */}
+            {cashRange && (
+              <div className="wg-cashbadge cash-panel cash-shine-loop mt-3.5 inline-flex max-w-full items-center gap-2.5 py-1.5 pr-4 pl-1.5">
+                <span className="wg-cashcoin cash-coin h-9 w-9 text-[16px]" aria-hidden="true">
+                  ₹
+                </span>
+                <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
+                  <span className="text-[11px] font-bold tracking-[0.12em] text-[#7a5200] uppercase">
+                    Cash up to
+                  </span>
+                  <span className="wg-cashamt cash-amount text-[23px] leading-none font-extrabold">
+                    ₹{indian(cashRange.max)}
+                  </span>
+                  <span className="text-[12.5px] font-medium text-[#7a5200]">per hire</span>
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -362,24 +382,10 @@ export default function WelcomeGate({
         {/* The board — everything at once, so nobody waits for the carousel. */}
         <div className="wg-board wg-pad px-7 pt-5 pb-4">
           <p className="wg-label mb-2.5 text-[11px] font-semibold tracking-[0.12em] text-[var(--color-ink-3)] uppercase">
-            What you get
+            Gifts on top of the cash
           </p>
 
           <div className="overflow-hidden rounded-xl border border-[var(--color-line)]">
-            <div className="wg-cash flex items-center gap-3 border-b border-[var(--color-line)] bg-[var(--color-gold-soft)] px-4 py-3">
-              <CoinStackArt className="h-9 w-9 shrink-0" />
-              <div className="min-w-0">
-                <p className="text-[14px] font-semibold">
-                  {cashRange
-                    ? `₹${indian(cashRange.min)} – ₹${indian(cashRange.max)} on every hire`
-                    : "Cash on every hire"}
-                </p>
-                <p className="text-[12.5px] leading-snug text-[var(--color-ink-2)]">
-                  Set by the role&apos;s band. Every rupee also earns a reward point.
-                </p>
-              </div>
-            </div>
-
             <ul>
               {ladder.map((t) => (
                 <li
@@ -396,7 +402,8 @@ export default function WelcomeGate({
           </div>
 
           <p className="wg-note mt-3 text-[12px] leading-relaxed text-[var(--color-ink-3)]">
-            Taxable salary income, shown gross. Points count on people who join.
+            Every rupee of cash also earns a reward point. Cash is taxable salary income,
+            shown gross; points count on people who join.
           </p>
         </div>
       </div>
@@ -447,6 +454,7 @@ export default function WelcomeGate({
         @media (max-height: 960px) {
           .wg-hero  { padding-top: 16px; padding-bottom: 18px; }
           .wg-title { font-size: 22px; }
+          .wg-cashbadge { margin-top: 10px; }
           .wg-show  { padding-top: 12px; padding-bottom: 10px; }
           .wg-stage { height: 150px; }
           .wg-img   { max-height: 150px; height: auto; }
@@ -461,6 +469,10 @@ export default function WelcomeGate({
         @media (max-height: 780px) {
           .wg-stage { height: 104px; }
           .wg-img   { max-height: 104px; }
+          .wg-hero  { padding-top: 12px; padding-bottom: 14px; }
+          .wg-cashbadge { margin-top: 8px; padding-top: 4px; padding-bottom: 4px; }
+          .wg-cashamt  { font-size: 20px; }
+          .wg-cashcoin { height: 30px; width: 30px; font-size: 14px; }
         }
         @media (max-width: 420px) {
           .wg-pad   { padding-left: 18px; padding-right: 18px; }

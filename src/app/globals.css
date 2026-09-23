@@ -93,3 +93,61 @@ body {
     @apply mt-1.5 block text-[12.5px] text-[var(--color-ink-3)];
   }
 }
+
+/* ---------------------------------------------------------------- cash
+   The "Cash up to" treatment, shared by the role cards and the poster.
+   Gold on a warm gradient, a coin mark, and a light sweep. On the cards the
+   sweep runs on hover only: fifty-six shimmering cards would be noise, not
+   emphasis. The poster, where it is the one headline, loops it slowly. */
+.cash-panel {
+  position: relative;
+  overflow: hidden;
+  border-radius: 12px;
+  background:
+    radial-gradient(120% 140% at 0% 0%, #fff6dc 0%, transparent 55%),
+    linear-gradient(135deg, #fdf0cf 0%, #f9e2a6 55%, #f3cf7a 100%);
+  box-shadow: inset 0 0 0 1px rgb(168 118 15 / .22), 0 1px 2px rgb(120 80 0 / .08);
+}
+.cash-amount {
+  background: linear-gradient(180deg, #8a5a00 0%, #b07a12 55%, #7a4c00 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+.cash-shine::after {
+  content: "";
+  position: absolute;
+  inset: -40% auto -40% -60%;
+  width: 45%;
+  transform: skewX(-18deg) translateX(0);
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / .75), transparent);
+  opacity: 0;
+  pointer-events: none;
+}
+.group:hover .cash-shine::after,
+.group:focus-within .cash-shine::after {
+  animation: cashSweep 900ms cubic-bezier(.3,.6,.3,1) 1;
+}
+.cash-shine-loop::after { animation: cashSweep 3.6s cubic-bezier(.3,.6,.3,1) 1.2s infinite; }
+@keyframes cashSweep {
+  0%   { opacity: 0; transform: skewX(-18deg) translateX(0); }
+  8%   { opacity: 1; }
+  30%  { opacity: 1; transform: skewX(-18deg) translateX(420%); }
+  31%, 100% { opacity: 0; transform: skewX(-18deg) translateX(420%); }
+}
+.cash-coin {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 35% 30%, #fff3c4 0%, #f5c451 45%, #c98a12 100%);
+  box-shadow: inset 0 -2px 0 rgb(120 70 0 / .25), 0 1px 2px rgb(120 80 0 / .25);
+  color: #6b4200;
+  font-weight: 700;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cash-shine::after, .cash-shine-loop::after { animation: none !important; }
+}

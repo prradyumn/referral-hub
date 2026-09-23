@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { rewardLabel } from "@/lib/format";
+import { rupees } from "@/lib/format";
 
 export type RoleCardJob = {
   id: string;
@@ -76,7 +76,7 @@ export default function RoleCard({ job }: { job: RoleCardJob }) {
   const posted = postedLabel(job.posted_on);
 
   return (
-    <li className="group card flex flex-col p-5 transition hover:border-[var(--color-ink-3)] hover:shadow-[0_1px_3px_rgba(23,27,36,.07),0_8px_24px_-12px_rgba(23,27,36,.18)]">
+    <li className="group card flex min-w-0 flex-col p-5 transition hover:border-[var(--color-ink-3)] hover:shadow-[0_1px_3px_rgba(23,27,36,.07),0_8px_24px_-12px_rgba(23,27,36,.18)]">
       {/* Mark + title. The title is the thing people scan, so it gets the
           weight — everything else is subordinate to it. */}
       <div className="flex items-start gap-3.5">
@@ -131,21 +131,39 @@ export default function RoleCard({ job }: { job: RoleCardJob }) {
       </p>
 
       <div className="mt-auto pt-4">
-        <div className="flex items-center justify-between gap-3 border-t border-[var(--color-line)] pt-3.5">
-          <span className="text-[13px] text-[var(--color-ink-3)]">Referral reward</span>
-          {/* A confirmed figure is the point of the card and is styled like it.
-              An unset one is deliberately quiet: it is the absence of a number,
-              not a number, and a gold box would draw the eye to nothing. */}
-          <span
-            className={
-              job.reward_confirmed
-                ? "text-[17px] font-semibold tracking-[-0.01em] text-[var(--color-gold)]"
-                : "text-[13px] text-[var(--color-ink-3)]"
-            }
-          >
-            {rewardLabel(job.reward_amount, job.reward_confirmed)}
-          </span>
-        </div>
+        {job.reward_confirmed ? (
+          /* The number is the reason to act, so it is the loudest thing on the
+             card after the title. "Up to" because it is paid only if they join
+             and complete the qualifying period. The sweep plays on hover. */
+          <div className="cash-panel cash-shine flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3.5 py-3">
+            <span className="cash-coin h-10 w-10 text-[16px]" aria-hidden="true">
+              ₹
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10.5px] font-bold tracking-[0.12em] text-[#7a5200] uppercase">
+                Cash up to
+              </p>
+              <p className="cash-amount text-[25px] leading-[1.05] font-extrabold">
+                {rupees(job.reward_amount)}
+              </p>
+            </div>
+            {/* Drops under the amount on the narrowest phones rather than
+                pushing the card off the screen. */}
+            <span
+              className="ml-auto shrink-0 rounded-full bg-white/75 px-2 py-1 text-[11px] font-semibold whitespace-nowrap text-[#7a5200] ring-1 ring-[#a8760f]/25"
+              title="Reward points count toward the milestone gifts"
+            >
+              +{Math.round(job.reward_amount).toLocaleString("en-IN")} pts
+            </span>
+          </div>
+        ) : (
+          /* Deliberately quiet: the absence of a number is not a number, and a
+             gold panel would draw the eye to nothing. */
+          <div className="flex items-center justify-between gap-3 border-t border-[var(--color-line)] pt-3.5">
+            <span className="text-[13px] text-[var(--color-ink-3)]">Referral reward</span>
+            <span className="text-[13px] text-[var(--color-ink-3)]">To be confirmed</span>
+          </div>
+        )}
 
         <Link
           href={`/refer?job=${job.id}`}
