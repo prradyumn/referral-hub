@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   CAR_LENGTH,
   FINISH_T,
@@ -14,6 +14,7 @@ import {
   trackPath,
   type Pose,
 } from "@/lib/race-track";
+import { raceSound, type Engine } from "@/lib/race-sound";
 
 export type Racer = {
   key: string;
@@ -74,9 +75,29 @@ function tagWidth(name: string, joined: number, leader: boolean, you: boolean): 
   const chars = shortName(name).length + String(joined).length + 1 + (you ? 6 : 0);
   return 34 + chars * 6.6 + (leader ? 15 : 0);
 }
+/** The rank chip on a pack's label: "2–8". */
+const packChipWidth = (from: number, to: number) => 12 + (String(from).length + String(to).length + 1) * 5.6;
+const packLine = (size: number, joined: number, you: boolean) => `${size} tied on ${joined}${you ? " · incl. you" : ""}`;
+function packWidth(from: number, to: number, size: number, joined: number, you: boolean): number {
+  return 3 + packChipWidth(from, to) + 7 + packLine(size, joined, you).length * 6.4 + 12;
+}
 type Tag = { dx: number; dy: number; w: number };
 
 type Box = { x: number; y: number; w: number; h: number };
+
+type Pack = {
+  id: string;
+  joined: number;
+  from: number;
+  to: number;
+  keys: Set<string>;
+  names: string[];
+  you: boolean;
+  /** Tied for first. */
+  lead: boolean;
+  /** The car the label rides on. */
+  front: string;
+};
 
 /** Keeps a tag of width w inside the drawing. */
 const tagX = (x: number, w: number) => Math.min(Math.max(x, w / 2 + 4), VIEW.w - w / 2 - 4);
@@ -117,20 +138,60 @@ export default function RaceTrack({ racers, periodLabel }: { racers: Racer[]; pe
       const p = byKey.get(r.key)!;
       const spot: Spot = { t: p.t, lat: p.lane * LANE_OFFSET };
       const kind: keyof typeof LIVERY = r.key === leaderKey ? "leader" : r.isYou ? "you" : "rest";
-      return { ...r, rank: i + 1, spot, pose: poseAt(spot.t, spot.lat), kind, named: i < 3 || r.isYou };
+      return { ...r, rank: i + 1, spot, pose: poseAt(spot.t, spot.lat), kind };
     });
+
+    // Ties race as a pack, and a pack gets ONE label — "2–8 · 7 tied on 1" —
+    // over its front car. A tag or badge per car in a pack of seven piles
+    // eight labels onto a few centimetres of track; the names are in the
+    // standings below, and on hover. A tie for the lead is a pack too, led
+    // by the tiebreak winner (most earned) — the gold car, as in the table.
+    const packs = new Map<number, typeof cars>();
+    for (const c of cars) {
+      if (c.joined > 0) packs.set(c.joined, [...(packs.get(c.joined) ?? []), c]);
+    }
+    const packOf = new Map<string, Pack>();
+    for (const [joined, members] of packs) {
+      if (members.length < 2) continue;
+      const pack: Pack = {
+        id: `pack:${joined}`,
+        joined,
+        from: members[0].rank,
+        to: members[members.length - 1].rank,
+        keys: new Set(members.map((m) => m.key)),
+        names: members.map((m) => shortName(m.name)),
+        you: members.some((m) => m.isYou),
+        lead: members[0].key === leaderKey,
+        front: members[0].key,
+      };
+      for (const m of members) packOf.set(m.key, pack);
+    }
+    const label = (c: (typeof cars)[number]): "name" | "pack" | "badge" | null => {
+      const pack = packOf.get(c.key);
+      if (pack) return pack.front === c.key ? "pack" : null;
+      return c.rank <= 3 || c.isYou ? "name" : "badge";
+    };
+    const labelled = cars.map((c) => ({ ...c, label: label(c), pack: packOf.get(c.key) ?? null }));
+
     const obstacles: Box[] = [
-      ...cars.map((c) => ({ x: c.pose.x - 17, y: c.pose.y - 9, w: 34, h: 18 })),
-      ...cars.filter((c) => !c.named).map((c) => ({ x: c.pose.x - 9, y: c.pose.y - 28, w: 18, h: 18 })),
+      ...labelled.map((c) => ({ x: c.pose.x - 17, y: c.pose.y - 9, w: 34, h: 18 })),
+      ...labelled.filter((c) => c.label === "badge").map((c) => ({ x: c.pose.x - 9, y: c.pose.y - 28, w: 18, h: 18 })),
       ...FIXED_BOXES,
     ];
     const tags = placeTags(
-      cars
-        .filter((c) => c.named)
-        .map((c) => ({ key: c.key, pose: c.pose, w: tagWidth(c.name, c.joined, c.key === leaderKey, c.isYou) })),
+      labelled
+        .filter((c) => c.label === "name" || c.label === "pack")
+        .map((c) => ({
+          key: c.key,
+          pose: c.pose,
+          w:
+            c.label === "pack"
+              ? packWidth(c.pack!.from, c.pack!.to, c.pack!.keys.size, c.joined, c.pack!.you) + (c.pack!.lead ? 15 : 0)
+              : tagWidth(c.name, c.joined, c.key === leaderKey, c.isYou),
+        })),
       obstacles,
     );
-    return { cars, tags, leaderKey };
+    return { cars: labelled, tags, leaderKey };
   }, [racers]);
 
   const carRefs = useRef(new Map<string, SVGGElement>());
@@ -147,6 +208,9 @@ export default function RaceTrack({ racers, periodLabel }: { racers: Racer[]; pe
   const [lights, setLights] = useState(-1); // -1 off, 0..5 lit, 6 = lights out
   const [celebrate, setCelebrate] = useState(0);
   const [hover, setHover] = useState<string | null>(null);
+  // Bumped by Replay: runs the whole start again, lights and all.
+  const [run, setRun] = useState(0);
+  const soundOn = useSyncExternalStore(raceSound.subscribe, raceSound.isOn, raceSound.isOnServer);
 
   // Runs after React has written the cars' FINAL positions into the DOM and
   // before the browser paints, so each car can be put back where it visibly
@@ -205,16 +269,23 @@ export default function RaceTrack({ racers, periodLabel }: { racers: Racer[]; pe
 
     for (const p of plans) place(p.c.key, p.from, 0, p.fromCount, layout.tags.get(p.c.key), fading ? 0 : 1);
 
+    let engine: Engine | null = null;
     const drive = () => {
       const t0 = performance.now();
       const prev = new Map<string, number>();
+      let last = t0;
+      engine = raceSound.engine();
       const step = (now: number) => {
         let moving = false;
+        let fastest = 0;
+        const dt = Math.max(1, now - last);
+        last = now;
         for (const p of plans) {
           const k = clamp01((now - t0 - p.delay) / p.dur);
           const e = ease(k);
           const s = { t: p.from.t + (p.to.t - p.from.t) * e, lat: p.from.lat + (p.to.lat - p.from.lat) * e };
           const speed = Math.abs(s.t - (prev.get(p.c.key) ?? s.t));
+          fastest = Math.max(fastest, speed / dt);
           prev.set(p.c.key, s.t);
           const count = Math.round(p.fromCount + (p.c.joined - p.fromCount) * e);
           place(p.c.key, s, speed, count, layout.tags.get(p.c.key), fading ? Math.min(1, k * 2.5) : 1);
@@ -222,10 +293,16 @@ export default function RaceTrack({ racers, periodLabel }: { racers: Racer[]; pe
           shownCount.current.set(p.c.key, count);
           if (k < 1) moving = true;
         }
+        // Flat out is about 4e-4 of the track a millisecond — the leader, mid-race.
+        engine?.rev(fastest / 4e-4);
         if (moving) frame.current = requestAnimationFrame(step);
         else {
           frame.current = null;
-          if (layout.leaderKey) setCelebrate((n) => n + 1);
+          engine?.stop();
+          if (layout.leaderKey) {
+            raceSound.finish();
+            setCelebrate((n) => n + 1);
+          }
         }
       };
       frame.current = requestAnimationFrame(step);
@@ -233,29 +310,39 @@ export default function RaceTrack({ racers, periodLabel }: { racers: Racer[]; pe
 
     if (frame.current) cancelAnimationFrame(frame.current);
     markReady();
+    raceSound.prime();
 
     // Lights only on the first race of a visit: on a period change they would
     // be a wait, not a show.
     if (first.current) {
       const timers: number[] = [];
-      for (let i = 0; i <= 5; i++) timers.push(window.setTimeout(() => setLights(i), 200 + i * 260));
+      for (let i = 0; i <= 5; i++)
+        timers.push(
+          window.setTimeout(() => {
+            setLights(i);
+            if (i > 0) raceSound.light();
+          }, 200 + i * 260),
+        );
       timers.push(
         window.setTimeout(() => {
           first.current = false;
           setLights(6);
+          raceSound.go();
           drive();
         }, 200 + 5 * 260 + 420),
       );
       return () => {
         timers.forEach(clearTimeout);
         if (frame.current) cancelAnimationFrame(frame.current);
+        engine?.stop(0.15);
       };
     }
     drive();
     return () => {
       if (frame.current) cancelAnimationFrame(frame.current);
+      engine?.stop(0.15);
     };
-  }, [layout]);
+  }, [layout, run]);
 
   // Drop the confetti after it has fallen, so it can fire again next time.
   useEffect(() => {
@@ -268,11 +355,59 @@ export default function RaceTrack({ racers, periodLabel }: { racers: Racer[]; pe
     if (el) fadeRefs.current.set(key, el);
     else fadeRefs.current.delete(key);
   };
+  const replay = () => {
+    if (frame.current) cancelAnimationFrame(frame.current);
+    frame.current = null;
+    current.current.clear();
+    shownCount.current.clear();
+    first.current = true;
+    setCelebrate(0);
+    setLights(-1);
+    setRun((n) => n + 1);
+  };
+  const toggleSound = async () => {
+    const on = !soundOn;
+    await raceSound.set(on);
+    // Turning it on is asking to hear it: run the start again.
+    if (on) replay();
+  };
+
   const leader = layout.cars.find((c) => c.key === layout.leaderKey);
   const hovered = layout.cars.find((c) => c.key === hover);
+  const hoveredPack = hover?.startsWith("pack:") ? layout.cars.find((c) => c.pack?.id === hover)?.pack ?? null : null;
+  const dimmed = (c: (typeof layout.cars)[number]) => Boolean(hover && hover !== c.key && hover !== c.pack?.id);
 
   return (
-    <div className="-mx-1 overflow-x-auto px-1">
+    <div className="relative -mx-1 overflow-x-auto px-1">
+      {/* Top-left is the one corner the circuit never uses. Both controls are
+          motion-only: with reduced motion nothing races, so there is nothing
+          to replay or hear. */}
+      <div className="race-controls absolute top-2 left-3 z-10 flex gap-1.5">
+        <button type="button" onClick={replay} className="race-btn" disabled={!layout.leaderKey}>
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+            <path d="M3.5 8a4.5 4.5 0 1 0 1.4-3.3" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            <path d="M4.6 1.8v3.1h3.1" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          Replay
+        </button>
+        <button
+          type="button"
+          onClick={toggleSound}
+          className="race-btn"
+          aria-pressed={soundOn}
+          title={soundOn ? "Sound is on" : "Sound is off"}
+        >
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+            <path d="M2.5 6h2.2L8 3.2v9.6L4.7 10H2.5z" fill="currentColor" />
+            {soundOn ? (
+              <path d="M10.4 5.6a3.2 3.2 0 0 1 0 4.8M12.3 3.8a5.8 5.8 0 0 1 0 8.4" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            ) : (
+              <path d="M10.5 6l3.5 4M14 6l-3.5 4" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            )}
+          </svg>
+          Sound
+        </button>
+      </div>
       <svg
         viewBox={`0 0 ${VIEW.w} ${VIEW.h}`}
         ref={svgRef}
@@ -351,7 +486,7 @@ export default function RaceTrack({ racers, periodLabel }: { racers: Racer[]; pe
         {/* Cars — back of the field first, so the leader draws on top. */}
         {[...layout.cars].reverse().map((c) => {
           const liv = LIVERY[c.kind];
-          const dim = hover && hover !== c.key;
+          const dim = dimmed(c);
           return (
             <g
               key={c.key}
@@ -394,19 +529,26 @@ export default function RaceTrack({ racers, periodLabel }: { racers: Racer[]; pe
           );
         })}
 
-        {/* Position badges for the unnamed, name tags for the podium and you. */}
+        {/* Name tags for the podium and you, one label per tied pack, a
+            numbered badge for anyone else. */}
         {layout.cars.map((c) => {
+          if (!c.label) return null;
           const tag = layout.tags.get(c.key);
           const liv = LIVERY[c.kind];
-          const dim = hover && hover !== c.key;
-          if (!tag) {
+          const dim = dimmed(c);
+          const tagRef = (el: SVGGElement | null) => {
+            if (el) tagRefs.current.set(c.key, el);
+            else tagRefs.current.delete(c.key);
+          };
+          const countRef = (el: SVGTSpanElement | null) => {
+            if (el) countRefs.current.set(c.key, el);
+            else countRefs.current.delete(c.key);
+          };
+          if (c.label === "badge" || !tag) {
             return (
               <g
                 key={`b-${c.key}`}
-                ref={(el) => {
-                  if (el) tagRefs.current.set(c.key, el);
-                  else tagRefs.current.delete(c.key);
-                }}
+                ref={tagRef}
                 transform={`translate(${n1(c.pose.x)} ${n1(c.pose.y - 19)})`}
                 className="race-tag"
                 opacity={dim ? 0.35 : 1}
@@ -422,13 +564,42 @@ export default function RaceTrack({ racers, periodLabel }: { racers: Racer[]; pe
               </g>
             );
           }
+          if (c.label === "pack") {
+            const pk = c.pack!;
+            const chip = packChipWidth(pk.from, pk.to);
+            const edge = pk.lead ? LIVERY.leader.body : pk.you ? LIVERY.you.body : "#3a3f5c";
+            return (
+              <g
+                key={`p-${c.key}`}
+                ref={tagRef}
+                transform={`translate(${n1(tagX(c.pose.x, tag.w))} ${n1(c.pose.y + tag.dy)})`}
+                className="race-tag"
+                opacity={dim ? 0.35 : 1}
+                onMouseEnter={() => setHover(pk.id)}
+                aria-hidden="true"
+              >
+                <g ref={fadeRef(c.key)}>
+                  <rect x={-tag.w / 2} y="-10" width={tag.w} height="20" rx="10" fill="#0c0e1a" fillOpacity="0.94" stroke={edge} strokeWidth="1.4" />
+                  <rect x={-tag.w / 2 + 3} y="-7" width={chip} height="14" rx="7" fill={edge} />
+                  <text x={-tag.w / 2 + 3 + chip / 2} y="3.3" textAnchor="middle" className="race-badge-text">
+                    {pk.from}–{pk.to}
+                  </text>
+                  <text x={-tag.w / 2 + 3 + chip + 7} y="3.8" className="race-tag-text">
+                    {pk.lead ? "🏆 " : ""}
+                    {pk.keys.size} tied on{" "}
+                    <tspan ref={countRef} className="race-tag-count">
+                      {c.joined}
+                    </tspan>
+                    {pk.you ? <tspan className="race-tag-count"> · incl. you</tspan> : null}
+                  </text>
+                </g>
+              </g>
+            );
+          }
           return (
             <g
               key={`t-${c.key}`}
-              ref={(el) => {
-                if (el) tagRefs.current.set(c.key, el);
-                else tagRefs.current.delete(c.key);
-              }}
+              ref={tagRef}
               transform={`translate(${n1(tagX(c.pose.x, tag.w))} ${n1(c.pose.y + tag.dy)})`}
               className="race-tag"
               opacity={dim ? 0.35 : 1}
@@ -436,25 +607,19 @@ export default function RaceTrack({ racers, periodLabel }: { racers: Racer[]; pe
               aria-hidden="true"
             >
               <g ref={fadeRef(c.key)}>
-              <rect x={-tag.w / 2} y="-10" width={tag.w} height="20" rx="10" fill="#0c0e1a" fillOpacity="0.94" stroke={c.kind === "rest" ? "#3a3f5c" : liv.body} strokeWidth="1.4" />
-              <circle cx={-tag.w / 2 + 10} r="6.5" fill={c.kind === "rest" ? "#3a3f5c" : liv.body} />
-              <text x={-tag.w / 2 + 10} y="3.3" textAnchor="middle" className="race-badge-text">
-                {c.rank}
-              </text>
-              <text x={-tag.w / 2 + 22} y="3.8" className="race-tag-text">
-                {c.kind === "leader" ? "🏆 " : ""}
-                {shortName(c.name)}
-                {c.isYou ? " (you)" : ""}{" "}
-                <tspan
-                  ref={(el) => {
-                    if (el) countRefs.current.set(c.key, el);
-                    else countRefs.current.delete(c.key);
-                  }}
-                  className="race-tag-count"
-                >
-                  {c.joined}
-                </tspan>
-              </text>
+                <rect x={-tag.w / 2} y="-10" width={tag.w} height="20" rx="10" fill="#0c0e1a" fillOpacity="0.94" stroke={c.kind === "rest" ? "#3a3f5c" : liv.body} strokeWidth="1.4" />
+                <circle cx={-tag.w / 2 + 10} r="6.5" fill={c.kind === "rest" ? "#3a3f5c" : liv.body} />
+                <text x={-tag.w / 2 + 10} y="3.3" textAnchor="middle" className="race-badge-text">
+                  {c.rank}
+                </text>
+                <text x={-tag.w / 2 + 22} y="3.8" className="race-tag-text">
+                  {c.kind === "leader" ? "🏆 " : ""}
+                  {shortName(c.name)}
+                  {c.isYou ? " (you)" : ""}{" "}
+                  <tspan ref={countRef} className="race-tag-count">
+                    {c.joined}
+                  </tspan>
+                </text>
               </g>
             </g>
           );
@@ -490,18 +655,36 @@ export default function RaceTrack({ racers, periodLabel }: { racers: Racer[]; pe
           </g>
         )}
 
-        {/* Hover: the full line for whichever car is under the pointer. */}
-        {hovered && (
-          <g transform={`translate(${n1(Math.min(Math.max(hovered.pose.x, 120), VIEW.w - 120))} ${n1(Math.max(hovered.pose.y - 60, 30))})`} pointerEvents="none">
-            <rect x="-110" y="-22" width="220" height="44" rx="8" fill="#0c0e1a" stroke="#3a3f5c" />
-            <text y="-4" textAnchor="middle" className="race-tip-name">
-              {hovered.rank}. {hovered.name}
-            </text>
-            <text y="13" textAnchor="middle" className="race-tip-meta">
-              {hovered.joined} joined · {rupees(hovered.earned)} earned
-            </text>
-          </g>
-        )}
+        {/* Hover: the full line for whichever car — or pack — is under the pointer. */}
+        {(hovered || hoveredPack) &&
+          (() => {
+            const anchor = hovered ?? layout.cars.find((c) => c.key === hoveredPack!.front)!;
+            const title = hovered
+              ? `${hovered.rank}. ${hovered.name}`
+              : `${hoveredPack!.from}–${hoveredPack!.to} · ${hoveredPack!.keys.size} tied on ${hoveredPack!.joined} joined`;
+            const shown = hoveredPack ? hoveredPack.names.slice(0, 3).join(", ") : "";
+            const more = hoveredPack ? hoveredPack.names.length - 3 : 0;
+            const meta = hovered
+              ? `${hovered.joined} joined · ${rupees(hovered.earned)} earned`
+              : more > 0
+                ? `${shown} and ${more} more`
+                : shown;
+            const w = Math.max(220, Math.max(title.length * 7.2, meta.length * 6.4) + 28);
+            return (
+              <g
+                transform={`translate(${n1(Math.min(Math.max(anchor.pose.x, w / 2 + 8), VIEW.w - w / 2 - 8))} ${n1(Math.max(anchor.pose.y - 60, 30))})`}
+                pointerEvents="none"
+              >
+                <rect x={n1(-w / 2)} y="-22" width={n1(w)} height="44" rx="8" fill="#0c0e1a" stroke="#3a3f5c" />
+                <text y="-4" textAnchor="middle" className="race-tip-name">
+                  {title}
+                </text>
+                <text y="13" textAnchor="middle" className="race-tip-meta">
+                  {meta}
+                </text>
+              </g>
+            );
+          })()}
       </svg>
     </div>
   );

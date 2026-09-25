@@ -1,0 +1,8 @@
+engine-loop.wav
+  "racing car engine sound loops" (loop_0.wav), by the Bandit Racer project
+  https://opengameart.org/content/racing-car-engine-sound-loops
+  Licence: CC0 1.0 (public domain dedication). No attribution required;
+  credited anyway. Derived from a public-domain recording on pdsounds.org.
+
+The start-light beeps and the finish chime are synthesised in the browser
+(src/lib/race-sound.ts) and are not files.

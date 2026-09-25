@@ -110,7 +110,7 @@ export default async function LeaderboardPage({
         ))}
       </nav>
 
-      <dl className="mb-4 grid grid-cols-3 gap-3">
+      <dl className="mb-4 grid grid-cols-[1fr_1fr_1.3fr] gap-2 sm:grid-cols-3 sm:gap-3">
         <Stat k="Referrals joined" v={summary.joined.toLocaleString("en-IN")} />
         <Stat k="Referrers" v={summary.people.toLocaleString("en-IN")} />
         <Stat k="Rewards earned" v={rupees(summary.earned)} />
@@ -221,9 +221,10 @@ export default async function LeaderboardPage({
 
 function Stat({ k, v }: { k: string; v: string }) {
   return (
-    <div className="card px-4 py-3">
-      <dt className="text-[12px] text-[var(--color-ink-3)]">{k}</dt>
-      <dd className="mt-0.5 text-[20px] font-semibold tracking-tight">{v}</dd>
+    <div className="card min-w-0 px-3 py-3 sm:px-4">
+      <dt className="text-[12px] leading-snug text-[var(--color-ink-3)]">{k}</dt>
+      {/* 16px on a phone: a third of 390px has to hold "₹6,95,000". */}
+      <dd className="mt-0.5 text-[16px] font-semibold tracking-tight tabular-nums sm:text-[20px]">{v}</dd>
     </div>
   );
 }

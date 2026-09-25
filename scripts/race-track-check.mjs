@@ -12,7 +12,7 @@
 
 import assert from "node:assert/strict";
 import {
-  CAR_LENGTH, FINISH_T, LANE_OFFSET, START_T, VIEW,
+  CAR_GAP, CAR_LENGTH, FINISH_T, LANE_OFFSET, START_T, VIEW,
   gridSlot, placeRacers, poseAt, trackLength, trackPath,
 } from "../src/lib/race-track.ts";
 
@@ -22,7 +22,7 @@ function check(name, fn) {
   catch (e) { failed++; console.log(`  FAIL  ${name}\n        ${e.message.split("\n")[0]}`); }
 }
 const racers = (scores) => scores.map((score, i) => ({ key: `r${i}`, score }));
-const step = (CAR_LENGTH + 6) / trackLength();
+const step = (CAR_LENGTH + CAR_GAP) / trackLength();
 
 console.log("\nThe track");
 check("draws as one open path of cubic curves", () => {
@@ -39,7 +39,7 @@ check("stays inside the drawing, with room for its width", () => {
 });
 check("start is before finish, with the start leaving room for a grid behind it", () => {
   assert.ok(START_T < FINISH_T);
-  assert.ok(START_T * trackLength() >= 4 * (CAR_LENGTH + 6) - 1, "four rows of two need space");
+  assert.ok(START_T * trackLength() >= 4 * (CAR_LENGTH + CAR_GAP) - 1, "four rows of two need space");
 });
 check("fractions are distances: equal steps cover equal ground", () => {
   const d = (a, b) => { const p = poseAt(a), q = poseAt(b); return Math.hypot(p.x - q.x, p.y - q.y); };

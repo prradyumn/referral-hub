@@ -17,6 +17,8 @@ export const VIEW = { w: 1000, h: 440 };
 export const TRACK_WIDTH = 50;
 export const LANE_OFFSET = 11.5; // two lanes, either side of the centre line
 export const CAR_LENGTH = 38;
+/** Nose-to-tail space between cars in a pack. Less, and they touch on the tight bends. */
+export const CAR_GAP = 10;
 
 /** Start bottom-left, finish top-right, winding between. */
 const CONTROL: Pt[] = [
@@ -154,7 +156,7 @@ export type Placement = { key: string; t: number; lane: -1 | 1 };
  */
 export function placeRacers(racers: { key: string; score: number }[]): Placement[] {
   const top = Math.max(0, ...racers.map((r) => r.score));
-  const step = (CAR_LENGTH + 6) / trackLength();
+  const step = (CAR_LENGTH + CAR_GAP) / trackLength();
   const placed: Placement[] = [];
 
   for (const r of racers) {
@@ -162,7 +164,9 @@ export function placeRacers(racers: { key: string; score: number }[]): Placement
     let spot: Placement | null = null;
     for (let tries = 0; tries < 40 && !spot; tries++) {
       for (const lane of [-1, 1] as const) {
-        if (placed.every((p) => p.lane !== lane || Math.abs(p.t - t) >= step)) {
+        // The tolerance: exactly one car length back must count as clear,
+        // and t − step − t is not always exactly step in floating point.
+        if (placed.every((p) => p.lane !== lane || Math.abs(p.t - t) >= step - 1e-9)) {
           spot = { key: r.key, t, lane };
           break;
         }
@@ -176,6 +180,6 @@ export function placeRacers(racers: { key: string; score: number }[]): Placement
 
 /** Grid slot i before the lights go out: two abreast, rows a car length apart, behind the line. */
 export function gridSlot(i: number): { t: number; lane: -1 | 1 } {
-  const step = (CAR_LENGTH + 6) / trackLength();
+  const step = (CAR_LENGTH + CAR_GAP) / trackLength();
   return { t: Math.max(0.004, START_T - 0.008 - Math.floor(i / 2) * step), lane: i % 2 === 0 ? -1 : 1 };
 }

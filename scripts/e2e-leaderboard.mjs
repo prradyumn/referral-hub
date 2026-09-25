@@ -11,6 +11,7 @@
  *   · a hire in both the sheet and the Hub is counted once
  *   · periods filter on the joining date
  *   · the page marks the leader gold and you mint, with labels, and a table
+ *   · a tie races as a pack under one label; the engine sound is served
  *
  * Synthetic joins are dated today, so they land in "This month", which the
  * real history leaves empty. Every row, referral and employee is deleted after.
@@ -172,6 +173,13 @@ try {
   check((await page.locator('svg.race path[fill="#199e70"]').count()) === 1, "one mint car: you");
   check((await page.locator("svg.race desc").textContent())?.includes(N("Racer Alpha")), "the race has a text description");
   check(/Leader/.test(await page.locator('[aria-label="Legend"]').innerText()), "and a legend, so colour is never alone");
+  // Twin and Hub tie on 1: one label for the pair, no badge per car.
+  const packs = await page.locator("svg.race .race-tag", { hasText: "tied on" }).allTextContents();
+  check(packs.some((t) => /3–4\s*2 tied on 1/.test(t)), `a tie is one pack label (${packs.join(" / ") || "none"})`);
+  const badges = await page.locator("svg.race .race-badge-text").allTextContents();
+  check(!badges.includes("4"), "and the cars in it carry no badge of their own");
+  const sfx = await page.request.get(`${BASE}/sfx/engine-loop.wav`);
+  check(sfx.ok() && /audio/.test(sfx.headers()["content-type"] ?? ""), "the engine sound is served to a signed-in user");
   check(errors.length === 0, `no console errors${errors.length ? `: ${errors.join(" | ")}` : ""}`);
 } catch (e) {
   failures++;

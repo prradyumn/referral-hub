@@ -2079,6 +2079,34 @@ leader on 11 really is a long way back. Ties sit side by side, then a car length
 grid. Only the podium and you get name tags; everyone else gets a numbered badge. Tags
 steer clear of cars, badges and fixed labels, and stay inside the drawing.
 
+**A tie is one pack, under one label.** The first version gave every car its own tag or
+badge. With 7 people on 1 join this year, that stacked two name tags and five badges over
+a few centimetres of track, on top of the cars (reported from production). Now a group
+tied on the same count gets a single pill over its front car — "2–8 · 7 tied on 1" — and
+no per-car badges. A tie for the lead is a pack too ("1–3 · 🏆 3 tied on 1"), outlined
+gold. Hovering the pill lists the names; the table has them all. Your car stays mint
+inside a pack, and the pill adds "incl. you". Cars in a pack also sit a little further
+apart (`CAR_GAP` 10, was 6), because on the tight bends they touched.
+
+**Sound: off unless you turn it on.** This is a work tool, often open in an office, so it
+never makes a sound by itself. Replay and Sound buttons sit in the track's empty top-left
+corner. The choice is remembered on the device. Turning sound on replays the start so you
+hear it. Both buttons are hidden with reduced motion, since nothing races.
+- The engine is a recording: `public/sfx/engine-loop.wav`, from OpenGameArt's
+  "racing car engine sound loops". It is **CC0**, derived from a public-domain recording;
+  the licence note is in `public/sfx/LICENSE.txt`. It is 76 KB.
+- One loop plays as two voices a fifth apart, pitched up and filtered brighter as the
+  field speeds up, then fades as the cars brake.
+- The start-light beeps and the two-note finish chime are simple tones, synthesised with
+  Web Audio (`src/lib/race-sound.ts`), not files.
+- Browsers only allow sound after a click, so the audio starts from the button. A race
+  that starts before any click runs silently.
+- The file sits behind sign-in like everything else (`src/proxy.ts` untouched). Only
+  signed-in people ever see the race.
+
+The stat tiles above the track got a wider money column on phones: at 360px, "₹6,95,000"
+ran into the tile's edge.
+
 **The animation.**
 - F1 start lights before the first race.
 - The field starts from a staggered grid behind the line.
