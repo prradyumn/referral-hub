@@ -68,3 +68,37 @@ export function formatPhone(value: string): string {
   if (d.length === 11 && d.startsWith("0")) return "+91" + d.slice(1);
   return "+" + d;
 }
+
+// ------------------------------------------------------------------ résumé
+// Shared with the browser so an oversized or wrong-type file is refused the
+// moment it is picked. The server re-checks everything — see src/lib/resume.ts,
+// which also inspects the bytes, since a filename and a browser-reported type
+// are both whatever the uploader says they are.
+
+/** 4 MB. Vercel refuses request bodies over 4.5 MB before the app sees them. */
+export const RESUME_MAX_BYTES = 4 * 1024 * 1024;
+
+export const RESUME_ACCEPT =
+  ".pdf,.docx,application/pdf," +
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+/**
+ * The quick check, for the browser. Returns an error message, or null.
+ *
+ * Old .doc is refused on purpose, not overlooked: it is the format macro
+ * malware travels in, and it cannot be inspected the way PDF and DOCX can.
+ */
+export function quickResumeCheck(file: { name: string; size: number }): string | null {
+  const name = file.name.toLowerCase();
+  if (name.endsWith(".doc")) {
+    return "Old Word (.doc) files aren't accepted. Save it as PDF or .docx and try again.";
+  }
+  if (!name.endsWith(".pdf") && !name.endsWith(".docx")) {
+    return "Upload the CV as a PDF or a Word (.docx) file.";
+  }
+  if (file.size === 0) return "That file is empty.";
+  if (file.size > RESUME_MAX_BYTES) {
+    return `That file is ${(file.size / 1024 / 1024).toFixed(1)} MB. The limit is 4 MB — a PDF export is usually much smaller.`;
+  }
+  return null;
+}

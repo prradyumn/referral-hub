@@ -26,6 +26,9 @@ type Row = {
   reward_confirmed: boolean;
   ta_added_at: string | null;
   keka_last_seen_at: string | null;
+  cv_name: string | null;
+  cv_size: number | null;
+  cv_scanned_at: string | null;
 };
 
 /**
@@ -53,11 +56,14 @@ export default async function InboxPage({
             j.title as job_title, j.req_id, j.keka_job_id,
             e.full_name as referrer_name, e.email as referrer_email,
             r.reward_amount_snapshot as reward, r.reward_confirmed_snapshot as reward_confirmed,
-            r.ta_added_at, r.keka_last_seen_at
+            r.ta_added_at, r.keka_last_seen_at,
+            -- Metadata only. Never select f.data in a list: 200 rows of 4 MB.
+            f.file_name as cv_name, f.size_bytes as cv_size, f.av_scanned_at as cv_scanned_at
        from referrals r
        join candidates c on c.id = r.candidate_id
        join jobs       j on j.id = r.job_id
        join employees  e on e.id = r.referrer_id
+       left join referral_resumes f on f.referral_id = r.id
       where ($1 = 'waiting' and r.ta_added_at is null and r.keka_last_seen_at is null)
          or ($1 = 'done' and (r.ta_added_at is not null or r.keka_last_seen_at is not null))
       order by r.submitted_at ${show === "waiting" ? "asc" : "desc"}
@@ -172,11 +178,29 @@ export default async function InboxPage({
 
                 <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-[var(--color-line)] pt-3">
                   <CopyDetails text={details} />
+                  {r.cv_name ? (
+                    <a
+                      href={`/admin/resume/${r.id}`}
+                      className="btn-ghost !px-3 !py-1.5 text-[13px]"
+                      title={`${r.cv_name} · every download is logged`}
+                    >
+                      Download CV
+                      <span className="text-[var(--color-ink-3)]">· {kb(r.cv_size)}</span>
+                    </a>
+                  ) : (
+                    <span className="text-[12.5px] text-[var(--color-ink-3)]">No CV attached</span>
+                  )}
                   {!inKeka && <MarkAdded id={r.id} added={r.ta_added_at !== null} />}
                   <p className="ml-auto text-[12px] text-[var(--color-ink-3)]">
                     Set source to <strong>Employee Referral</strong> in Keka.
                   </p>
                 </div>
+                {r.cv_name && !r.cv_scanned_at && (
+                  <p className="mt-2 text-[12px] leading-relaxed text-[var(--color-ink-3)]">
+                    CV passed file checks but has <strong>not been virus-scanned</strong>. Open it
+                    in a viewer you trust, not by double-clicking an unknown file.
+                  </p>
+                )}
               </li>
             );
           })}
@@ -193,4 +217,11 @@ function Field({ k, v }: { k: string; v: string }) {
       <dd className="min-w-0 font-medium break-all">{v}</dd>
     </div>
   );
+}
+
+function kb(bytes: number | null): string {
+  if (!bytes) return "";
+  return bytes < 1024 * 1024
+    ? `${Math.max(1, Math.round(bytes / 1024))} KB`
+    : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }

@@ -126,7 +126,7 @@ from Google — so the domain rule is holding in practice, not just in theory.
 
 ### Not built yet
 
-No résumé upload (the field is absent, not broken). No admin portal.
+CV upload and the admin portal are both built — see §25 and §17. CVs are not yet virus-scanned.
 
 **The ATS and HRMS system is Keka**, confirmed 21 September 2026 — Keka Hire, Keka HRIS
 and Keka Payroll are all licensed. The jobs sync and the candidate push are **written but
@@ -639,8 +639,9 @@ deduction and net so nobody is surprised by a payslip.
 
 ### Other security work owed
 
-Résumé scanning before the file becomes readable. Every CSV export and résumé download
-audited, because both move candidate PII. Rate limits on submission — cash plus a
+Résumé scanning before the file becomes readable — **still owed** (§25). Every CSV export
+and résumé download audited, because both move candidate PII — **résumé downloads done**
+(`pii_access_log`, §25); CSV export has no export to audit yet. Rate limits on submission — cash plus a
 leaderboard is an incentive to spray résumés. Service-account credentials in a secret
 manager, rotated, never in the repo.
 
@@ -1284,6 +1285,7 @@ real alerting exists.
 | `npm run e2e:admin` | 13 assertions: admin routes and the predicate itself |
 | `scripts/e2e-refer.mjs` | The referral flow, against a real Keka job |
 | `scripts/e2e-scoping.mjs` | One employee cannot see another's candidates |
+| `npm run e2e:resume` | 58 assertions: CV checks, storage, admin-only download, append-only audit (§25) |
 
 ---
 
@@ -1651,8 +1653,8 @@ referrer field and a referral made there cannot be attributed reliably (§22).
 
 **The refer form** picks a role by typing (`RolePicker.tsx`, an ARIA combobox showing each
 role's cash), shows "If they join, you earn cash up to ₹X" as soon as a role is picked, and
-ends on an honest three-step "what happens next". CV upload is **not** built; it needs
-Vercel Blob.
+ends on an honest three-step "what happens next". CV upload was built on 25 September, in
+Postgres rather than Blob — see §25.
 
 **Home for someone with no referrals** (`home/FirstVisit.tsx`) leads with the offer, the
 four best-paying open roles, the gift ladder with photographs, and three steps. The
@@ -1701,3 +1703,152 @@ The fix, and the rule from now on:
 **Verified:** 8 viewports from 320 to 1440 × 12 pages, no horizontal overflow; poster fits
 or scrolls to its end everywhere. `keka:check`, `e2e:bands`, `e2e:stages`, `e2e:engine`,
 `e2e:admin`, `e2e-scoping` and `e2e-refer` pass, and the production build succeeds.
+
+---
+
+## 25. CVs, and an audit trail for reading them — 25 September 2026
+
+**The refer form takes an optional CV**, and **the TA inbox offers it for download**. That
+closes the gap §24 named: TA copies every referral into Keka by hand, and had nothing to
+attach.
+
+### Stored in Postgres, not Vercel Blob
+
+§24 said this needed Vercel Blob. It didn't. At ~412 referrals a year the CV table grows by
+well under 100 MB a year. `referral_resumes` (db/0017) keeps each file beside its referral,
+which buys three things Blob would have cost effort to get:
+
+- **Private by construction.** No URL for the file exists anywhere, public or signed.
+- **Atomic.** The CV is inserted in the same transaction as `submit_referral`
+  (`withTransaction` in `src/lib/db.ts`), so a referral and its CV commit together or not
+  at all.
+- **Erased with the referral.** It cascades, so a DPDP erasure or the retention purge takes
+  the CV in the same DELETE.
+
+There is exactly one reader, `src/app/(app)/admin/resume/[id]/route.ts`. Moving the files to
+Blob — or into Keka, once the push is on — is a change to that one file. The `data` column
+uses `storage external`, because PDF and DOCX are already compressed.
+
+§6's rule still holds: referrals are written only through `submit_referral`. The CV row is
+keyed to a referral that function has just created, in the same transaction.
+
+### What is checked, and what is not
+
+**Not virus-scanned.** §9 asks for scanning before a file is readable, and no scanner
+exists. `av_scanned_at` stays null, and the inbox says *"not been virus-scanned"* beside
+every download. This is the one part of §9 still owed for CVs.
+
+What `src/lib/resume.ts` does instead is refuse the features résumé attacks actually use,
+with no AI and no vendor:
+
+| Check | Refuses |
+| --- | --- |
+| Type from the bytes, never the name or browser | a text file named `.pdf`; a DOCX renamed `.pdf` |
+| PDF structure | scripts, launch actions, embedded files, rich media, XFA, form submission |
+| PDF object streams | a script compressed where a scan of raw bytes cannot see it |
+| PDF name escapes | `/J#61vaScript` — hex-escaped to dodge a naïve match |
+| PDF encryption | encrypted structure, which cannot be inspected |
+| DOCX parts | macros (`vbaProject.bin`), embedded OLE objects, ActiveX |
+| DOCX relationships | external templates and frames — the Follina-style remote-content route |
+| Format and size | old `.doc`, anything over 4 MB |
+
+**The false-positive trap, and why the checker is shaped the way it is.** A PDF's page text
+sits in its raw bytes. So a naïve scan for `/JavaScript` refuses any engineer whose CV says
+"Node/JavaScript (5 yrs)" — and ConveGenius hires engineers. The checker therefore searches
+only the PDF's *structure*, the dictionaries where scripts and actions are declared, and
+skips page-content streams. By the same logic, DOCX checks look at parts and relationship
+*types*, never document text, so an external hyperlink (a LinkedIn URL) is fine and a CV
+listing "VBA macros" as a skill is fine.
+
+A determined attacker can still get something past a structural check. Closing that is what
+the scanner is for.
+
+### Limits worth knowing
+
+**4 MB, and it is not arbitrary.** Vercel refuses function request bodies over 4.5 MB before
+the app runs, so a higher cap would be one no upload could reach. `next.config.ts` raises
+the Server Action body limit from its 1 MB default to 4.5 MB to match. The browser refuses
+an oversized file the moment it is picked, so nobody meets Vercel's raw error.
+
+**PDF and DOCX only.** Old `.doc` is refused on purpose: it is the format macro malware
+travels in, and it cannot be inspected the way DOCX can.
+
+### Every download is audited — §9, delivered
+
+`pii_access_log` records who downloaded which referral's CV, and when. The row is written
+**before** the file is served, so if the log fails, nothing is served. It is append-only:
+triggers refuse UPDATE, DELETE and TRUNCATE.
+
+It deliberately has **no foreign keys**. The log is evidence of access, so it has to outlive
+both the referral (erasure deletes that) and the employee — hence `actor_email` alongside
+`actor_id`. It holds ids, never candidate data; a CV's file name can contain the
+candidate's name, so it is not logged.
+
+Two honest limits:
+
+- **The database owner can still disable the trigger.** This stops application bugs and
+  accidents, not a malicious owner. A log that cannot be touched has to be shipped
+  somewhere else — a Phase 1 audit question.
+- **Test runs leave rows.** `e2e:resume` downloads as a temporary admin. Those rows stay,
+  because a download by a test account is still a download. They are identifiable by an
+  `e2e_` address.
+
+The download is served as an attachment only, with `nosniff`, `no-store` and a
+`sandbox` CSP, so a browser never opens an unscanned file inline. A non-admin gets a real
+404 — no `loading.tsx` sits in front of it (§24's trap) — and leaves no audit row.
+
+### Two form bugs found on the way
+
+Neither was new. Both became likely the moment CV content could be refused server-side,
+because until then client and server validated identical rules and a server field error
+almost never happened.
+
+1. **Fixing a field threw the user back to review.** A server error shows step 1 while the
+   `step` state is still 2. Dismissing the error without resetting `step` jumped to the
+   review screen mid-edit.
+2. **After one refused CV, review could never be reached.** `review()` cleared all
+   dismissals, which brought the *previous* response's errors back and forced step 1 again.
+   Dismissals are now recorded against the response they dismiss, so the next submission
+   starts clean with nothing to reset.
+
+Also: **the CV lives in React state, not the file input.** React 19 resets uncontrolled
+inputs after every form action — including one that returns a validation error — and the
+input unmounts on the review step anyway. A file kept only in the input would be silently
+dropped and the referral resubmitted without it. The form now submits explicitly, appending
+the CV from state.
+
+### A trap in `npm run db:apply`, not yet sprung
+
+`apply-schema.mjs` replays every file, and db/0006, 0012, 0013 and 0014 write with
+`on conflict … do update`. That resets `keka_stage_map` wording, `milestone_basis` and
+`auto_apply_experience_bands` to their migration defaults **on every run**.
+
+It is harmless today: none of those is editable in `/admin/settings`, and the live values
+match the defaults. It becomes a silent bug the day one is made editable, or changed by
+hand — the next deploy's `db:apply` would put it back, and `auto_apply_experience_bands`
+changes the reward employees see. Before making any of them editable, change that
+migration to `do nothing`.
+
+For this reason db/0017 was applied on its own, not by a full replay.
+
+### Tests
+
+`npm run e2e:resume` — 58 assertions, in a real browser against the real form:
+
+- nine kinds of refused file, and that the user stays on the form after each
+- that a refused file creates no referral
+- that three ordinary CVs are accepted, including the two false-positive traps above
+- stored bytes identical to the upload
+- a non-admin gets 404 and leaves no trace
+- an admin download is logged and byte-identical, with the headers above
+- that UPDATE, DELETE and TRUNCATE on the log are all refused
+
+**Run it whenever `src/lib/resume.ts`, the refer form, or `/admin/resume` changes.**
+`e2e:admin`, `e2e-refer` and `e2e-scoping` also pass after this change.
+
+### Still owed for CVs
+
+- **A virus scanner**, and setting `av_scanned_at` from it. Until then, TA is told plainly.
+- **Rate limits on submission** (§9) — a CV upload makes spraying cheaper to do and dearer
+  to store.
+- **A retention window** for CVs, which is **D14**, still with HR.

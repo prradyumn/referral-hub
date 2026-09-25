@@ -63,3 +63,40 @@ export async function queryOne<T>(
   const rows = await query<T>(text, params);
   return rows[0] ?? null;
 }
+
+export type Tx = {
+  query<T>(text: string, params?: unknown[]): Promise<T[]>;
+  queryOne<T>(text: string, params?: unknown[]): Promise<T | null>;
+};
+
+/**
+ * Runs `fn` in one transaction on one connection, committing if it returns
+ * and rolling back if it throws.
+ *
+ * Safe on Neon's pooled endpoint: in transaction mode the pooler pins a
+ * server connection for the life of a transaction, which is also what keeps
+ * submit_referral's pg_advisory_xact_lock meaningful.
+ */
+export async function withTransaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
+  const client = await getPool().connect();
+  const tx: Tx = {
+    async query<R>(text: string, params: unknown[] = []) {
+      return (await client.query(text, params)).rows as R[];
+    },
+    async queryOne<R>(text: string, params: unknown[] = []) {
+      return ((await client.query(text, params)).rows[0] as R | undefined) ?? null;
+    },
+  };
+
+  try {
+    await client.query("begin");
+    const result = await fn(tx);
+    await client.query("commit");
+    return result;
+  } catch (e) {
+    await client.query("rollback").catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
+}

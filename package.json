@@ -16,7 +16,8 @@
     "e2e:admin": "node --env-file=.env.local scripts/e2e-admin.mjs",
     "e2e:stages": "node --env-file=.env.local scripts/e2e-stages.mjs",
     "e2e:engine": "node --env-file=.env.local scripts/e2e-reward-engine.mjs",
-    "e2e:bands": "node --env-file=.env.local scripts/e2e-bands.mjs"
+    "e2e:bands": "node --env-file=.env.local scripts/e2e-bands.mjs",
+    "e2e:resume": "node --env-file=.env.local scripts/e2e-resume.mjs"
   },
   "dependencies": {
     "next": "^16.3.5",

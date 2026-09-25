@@ -1,9 +1,16 @@
 "use client";
 
-import { useActionState, useMemo, useState } from "react";
+import { startTransition, useActionState, useMemo, useState } from "react";
 import Link from "next/link";
 import { submitReferral, type SubmitState } from "./actions";
-import { referralSchema, RELATIONSHIPS, CONSENT_NOTICE, formatPhone } from "@/lib/validation";
+import {
+  referralSchema,
+  RELATIONSHIPS,
+  CONSENT_NOTICE,
+  formatPhone,
+  quickResumeCheck,
+  RESUME_ACCEPT,
+} from "@/lib/validation";
 import { rupees } from "@/lib/format";
 import RolePicker from "./RolePicker";
 
@@ -37,10 +44,26 @@ export default function ReferralForm({
   const [jobId, setJobId] = useState(initialJobId ?? "");
   const [values, setValues] = useState({ ...EMPTY });
   const [consent, setConsent] = useState(false);
+  // The CV is held here, not in the file input. The input unmounts on the
+  // review step, remounts empty on "Back to edit", and React 19 resets
+  // uncontrolled inputs after every form action — including one that returns
+  // a validation error — so a file kept only in the input would be silently
+  // dropped and the referral resubmitted without it.
+  const [resume, setResume] = useState<File | null>(null);
   const [step, setStep] = useState<1 | 2>(1);
   const [clientErrors, setClientErrors] = useState<Record<string, string>>({});
-  // Server-reported fields the user has since edited.
-  const [dismissed, setDismissed] = useState<Record<string, true>>({});
+  // Server-reported fields the user has since edited — recorded against the
+  // response they came from. A dismissal applies only to that response, so the
+  // next submission's errors show without anything having to reset them.
+  //
+  // Clearing dismissals by hand (review() used to) brought the *previous*
+  // response's errors back — `state` keeps them until the next one arrives —
+  // and forced step 1 again, so after one refused CV the review step could
+  // never be reached.
+  const [dismissed, setDismissed] = useState<{
+    for: SubmitState | null;
+    fields: Record<string, true>;
+  }>({ for: null, fields: {} });
 
   const [state, formAction, pending] = useActionState<SubmitState, FormData>(
     submitReferral,
@@ -56,15 +79,25 @@ export default function ReferralForm({
   // to the field it concerns, and editing that field dismisses it.
   const serverErrors =
     state.status === "error" && state.fieldErrors ? state.fieldErrors : {};
+  const dismissedFields = dismissed.for === state ? dismissed.fields : {};
   const liveServerErrors = Object.fromEntries(
-    Object.entries(serverErrors).filter(([field]) => !dismissed[field]),
+    Object.entries(serverErrors).filter(([field]) => !dismissedFields[field]),
   );
   const errors: Record<string, string> = { ...liveServerErrors, ...clientErrors };
   const shownStep = Object.keys(liveServerErrors).length > 0 ? 1 : step;
 
+  // A server error shows step 1 while `step` is still 2 — the review step the
+  // submit came from. Dismissing the error without also resetting `step` sent
+  // the user straight back to review the moment they started fixing it.
+  function dismissServerError(field: string) {
+    if (!liveServerErrors[field]) return;
+    setDismissed({ for: state, fields: { ...dismissedFields, [field]: true } });
+    setStep(1);
+  }
+
   function set(field: keyof typeof EMPTY, value: string) {
     setValues((v) => ({ ...v, [field]: value }));
-    if (serverErrors[field]) setDismissed((d) => ({ ...d, [field]: true }));
+    dismissServerError(field);
     if (clientErrors[field]) {
       setClientErrors((e) => {
         const next = { ...e };
@@ -74,14 +107,28 @@ export default function ReferralForm({
     }
   }
 
+  function pickResume(file: File | null) {
+    dismissServerError("resume");
+    const problem = file ? quickResumeCheck(file) : null;
+    setClientErrors((e) => {
+      const next = { ...e };
+      if (problem) next.resume = problem;
+      else delete next.resume;
+      return next;
+    });
+    setResume(problem ? null : file);
+  }
+
   function review() {
     const parsed = referralSchema.safeParse({ ...values, jobId, consent });
-    if (!parsed.success) {
+    const resumeProblem = resume ? quickResumeCheck(resume) : null;
+    if (!parsed.success || resumeProblem) {
       const next: Record<string, string> = {};
-      for (const issue of parsed.error.issues) {
+      for (const issue of parsed.success ? [] : parsed.error.issues) {
         const key = String(issue.path[0] ?? "form");
         if (!next[key]) next[key] = issue.message;
       }
+      if (resumeProblem) next.resume = resumeProblem;
       setClientErrors(next);
       const first = document.getElementById(Object.keys(next)[0]);
       first?.focus();
@@ -89,7 +136,6 @@ export default function ReferralForm({
       return;
     }
     setClientErrors({});
-    setDismissed({});
     setStep(2);
   }
 
@@ -104,6 +150,11 @@ export default function ReferralForm({
           <strong>{state.refCode}</strong> · {state.candidateName}
           {state.jobTitle ? ` for ${state.jobTitle}` : ""}
         </p>
+        {state.resumeName && (
+          <p className="mt-1.5 text-[13px] text-[var(--color-ink-3)]">
+            CV attached: {state.resumeName}
+          </p>
+        )}
         {/* Say what actually happens next, step by step. The Hub cannot put the
             candidate into Keka itself yet; a recruiter does, from the inbox. */}
         <ol className="mx-auto mt-6 max-w-[420px] space-y-3 text-left">
@@ -153,7 +204,15 @@ export default function ReferralForm({
         </p>
       )}
 
-      <form action={formAction} className="card p-6">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          const fd = new FormData(e.currentTarget);
+          if (resume) fd.set("resume", resume);
+          startTransition(() => formAction(fd));
+        }}
+        className="card p-6"
+      >
         <input type="hidden" name="jobId" value={jobId} />
         <input type="hidden" name="jobTitle" value={job?.title ?? ""} />
         {/* Only present when ticked: an empty string would satisfy `?? false`
@@ -258,6 +317,13 @@ export default function ReferralForm({
               />
             </div>
 
+            <ResumeField
+              file={resume}
+              error={errors.resume}
+              onPick={pickResume}
+              onClear={() => pickResume(null)}
+            />
+
             <div className="mt-5">
               <label htmlFor="relationship" className="label">
                 How do you know them? <span className="text-[var(--color-danger)]">*</span>
@@ -330,6 +396,7 @@ export default function ReferralForm({
               )}
               {values.linkedin && <Row k="LinkedIn" v={values.linkedin} />}
               <Row k="How you know them" v={values.relationship} />
+              <Row k="CV" v={resume ? `${resume.name} · ${fileSize(resume.size)}` : "Not attached"} />
               <Row k="Role" v={job ? `${job.title} · ${job.location}` : "—"} />
               <Row
                 k="If they join, you earn"
@@ -424,6 +491,84 @@ function Row({ k, v, strong }: { k: string; v: string; strong?: boolean }) {
       >
         {v}
       </dd>
+    </div>
+  );
+}
+
+function fileSize(bytes: number): string {
+  return bytes < 1024 * 1024
+    ? `${Math.max(1, Math.round(bytes / 1024))} KB`
+    : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+/**
+ * Optional. Once a file is chosen it is shown from state rather than the
+ * native input, so it reads correctly after the input has remounted.
+ */
+function ResumeField({
+  file,
+  error,
+  onPick,
+  onClear,
+}: {
+  file: File | null;
+  error?: string;
+  onPick: (file: File | null) => void;
+  onClear: () => void;
+}) {
+  return (
+    <div className="mt-5">
+      <label htmlFor="resume" className="label">
+        CV <span className="font-normal text-[var(--color-ink-3)]">(optional)</span>
+      </label>
+
+      {file ? (
+        <div
+          className={`flex min-w-0 items-center gap-3 rounded-md border px-3 py-2.5 ${
+            error ? "border-[var(--color-danger)]" : "border-[var(--color-line)]"
+          }`}
+        >
+          <span
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-[var(--color-brand-soft)] text-[10px] font-bold text-[var(--color-brand)] uppercase"
+            aria-hidden="true"
+          >
+            {file.name.split(".").pop()}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[14px] font-medium">{file.name}</span>
+            <span className="block text-[12px] text-[var(--color-ink-3)]">{fileSize(file.size)}</span>
+          </span>
+          <button
+            type="button"
+            onClick={onClear}
+            className="shrink-0 text-[13px] text-[var(--color-ink-3)] underline-offset-2 hover:text-[var(--color-ink)] hover:underline"
+          >
+            Remove
+          </button>
+        </div>
+      ) : (
+        <input
+          id="resume"
+          type="file"
+          accept={RESUME_ACCEPT}
+          onChange={(e) => onPick(e.target.files?.[0] ?? null)}
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? "resume-error" : "resume-help"}
+          className={`field cursor-pointer file:mr-3 file:cursor-pointer file:rounded file:border-0 file:bg-[var(--color-brand-soft)] file:px-3 file:py-1.5 file:text-[13px] file:font-medium file:text-[var(--color-brand)] ${
+            error ? "field-error" : ""
+          }`}
+        />
+      )}
+
+      {error ? (
+        <p id="resume-error" className="hint" role="alert">
+          {error}
+        </p>
+      ) : (
+        <p id="resume-help" className="mt-1.5 text-[12.5px] text-[var(--color-ink-3)]">
+          PDF or Word (.docx), up to 4 MB. Only Talent Acquisition can open it.
+        </p>
+      )}
     </div>
   );
 }

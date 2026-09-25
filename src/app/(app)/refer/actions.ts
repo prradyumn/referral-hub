@@ -2,8 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { after } from "next/server";
-import { queryOne } from "@/lib/db";
+import { queryOne, withTransaction } from "@/lib/db";
 import { currentEmployee } from "@/lib/employees";
+import { readResume } from "@/lib/resume";
 import { referralSchema, CONSENT_NOTICE } from "@/lib/validation";
 import { tryPushAfterSubmit } from "@/lib/keka/candidates";
 
@@ -15,6 +16,8 @@ export type SubmitState = {
   reward?: number;
   candidateName?: string;
   jobTitle?: string;
+  /** Present when a CV was stored with the referral. */
+  resumeName?: string;
 };
 
 // The SQLSTATEs submit_referral raises on purpose. Their messages are written
@@ -52,6 +55,14 @@ export async function submitReferral(
     return { status: "error", fieldErrors };
   }
 
+  // Checked before anything is written: a CV that fails the checks refuses the
+  // submission, rather than leaving a referral behind without the CV the
+  // referrer meant to attach.
+  const cv = await readResume(formData.get("resume"));
+  if (!cv.ok) {
+    return { status: "error", fieldErrors: { resume: cv.message } };
+  }
+
   // The referrer comes from the session and only from the session. The database
   // can no longer work out who is calling, so a referrer_id taken from the form
   // would let anyone file a referral in someone else's name.
@@ -68,23 +79,46 @@ export async function submitReferral(
   const v = parsed.data;
 
   try {
-    const row = await queryOne<{ ref_code: string; reward_amount: number }>(
-      `select * from public.submit_referral(
-         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
-       )`,
-      [
-        employee.id,
-        v.jobId,
-        v.fullName,
-        v.email,
-        v.phone,
-        v.currentOrg || null,
-        v.currentDesignation || null,
-        v.linkedin || null,
-        v.relationship,
-        CONSENT_NOTICE,
-      ],
-    );
+    // One transaction: the referral and its CV commit together or not at all.
+    // The CV row is keyed to a referral submit_referral has just created, so
+    // CONTEXT.md §6's rule — referrals are written only through that function,
+    // so the duplicate check cannot be skipped — still holds.
+    const row = await withTransaction(async (tx) => {
+      const created = await tx.queryOne<{ ref_code: string; reward_amount: number }>(
+        `select * from public.submit_referral(
+           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+         )`,
+        [
+          employee.id,
+          v.jobId,
+          v.fullName,
+          v.email,
+          v.phone,
+          v.currentOrg || null,
+          v.currentDesignation || null,
+          v.linkedin || null,
+          v.relationship,
+          CONSENT_NOTICE,
+        ],
+      );
+
+      if (created && cv.resume) {
+        await tx.query(
+          `insert into referral_resumes
+             (referral_id, file_name, content_type, size_bytes, sha256, data)
+           select id, $2, $3, $4, $5, $6 from referrals where ref_code = $1`,
+          [
+            created.ref_code,
+            cv.resume.fileName,
+            cv.resume.contentType,
+            cv.resume.size,
+            cv.resume.sha256,
+            cv.resume.bytes,
+          ],
+        );
+      }
+      return created;
+    });
 
     revalidatePath("/referrals");
 
@@ -113,6 +147,7 @@ export async function submitReferral(
       reward: row?.reward_amount,
       candidateName: v.fullName,
       jobTitle: String(formData.get("jobTitle") ?? ""),
+      resumeName: cv.resume?.fileName,
     };
   } catch (e) {
     const code = (e as { code?: string })?.code;
