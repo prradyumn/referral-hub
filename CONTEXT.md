@@ -1295,6 +1295,8 @@ real alerting exists.
 | `scripts/e2e-refer.mjs` | The referral flow, against a real Keka job |
 | `scripts/e2e-scoping.mjs` | One employee cannot see another's candidates |
 | `npm run e2e:resume` | 58 assertions: CV checks, storage, admin-only download, append-only audit (§25) |
+| `npm run keka:attribution` | 37 assertions: who a Keka referral is credited to, and who it never is (§26) |
+| `npm run e2e:keka-referrals` | 47 assertions: Keka referrals into the Hub, admin review, referrer's view (§26) |
 
 ---
 
@@ -1861,3 +1863,124 @@ For this reason db/0017 was applied on its own, not by a full replay.
 - **Rate limits on submission** (§9) — a CV upload makes spraying cheaper to do and dearer
   to store.
 - **A retention window** for CVs, which is **D14**, still with HR.
+
+---
+
+## 26. Referrals made in Keka, brought into the Hub — 25 September 2026
+
+Until now the Keka sync ran one way. A referral made in the Hub was tracked through Keka,
+but **a referral made in Keka never appeared here**. The employee who made it saw nothing,
+and was never credited. The nightly sync now finds those referrals and brings them in.
+
+### The problem is attribution, not access
+
+The key already reads candidates. What Keka lacks is a referrer. Its candidate record has
+no referrer field — only `sourceTitle` ("Employee Referral") and `sourcedBy`, a free-text
+string that §22 found on about a third of referrals. A reward follows from who referred,
+so the rule is deliberately narrow:
+
+- **Automatic credit comes from one field only**: the one HR adds for the referrer's work
+  email, named in `app_settings.keka_referrer_email_field`.
+- **`sourcedBy` never credits anyone.** On a referral it may be the referrer, or the
+  recruiter who typed the candidate in. It can only *suggest* a person.
+- **Every field is never scanned for "any work email".** A hiring manager's or recruiter's
+  address in another field would be credited as the referrer, and paid.
+
+Everything the rule cannot settle waits at **Admin → Keka referrals**, where an admin
+credits it or dismisses it.
+
+**Until HR adds that field, nothing is credited automatically.** `keka_referrer_email_field`
+is empty, so every Keka referral waits for an admin. That is the correct state for now, and
+the page says so. The ask to HR is one required field, "Referrer work email", on
+referral-enabled jobs. Then put its name in Settings — the page lists the field names Keka
+has actually sent, so it can be copied exactly.
+
+### How it works
+
+| Piece | File |
+| --- | --- |
+| The rules — pure, runnable without credentials | `src/lib/keka/attribution.ts` |
+| The nightly scan | `src/lib/keka/referrals.ts` |
+| Staging, intake, crediting | `db/0018_keka_referrals.sql` |
+| One fetch per job, shared with the stage sync | `src/lib/keka/job-candidates.ts` |
+| Admin review | `src/app/(app)/admin/keka-referrals/` |
+
+The scan reads every open, referral-enabled job and keeps **only** candidates Keka marks
+as an Employee Referral. Everyone else is dropped in memory and never stored. This is the
+one deliberate exception to §16's rule of polling only jobs the Hub has referrals on: the
+Hub still holds nobody that nobody referred.
+
+A referral is credited through `credit_keka_referral()`, which calls `submit_referral`. So
+the duplicate check, normalisation, advisory locks and reward snapshot are exactly those of a
+referral made in the form, and §6's rule holds. An imported referral:
+
+- has `origin = 'keka'`, and shows **"Made in Keka"** on the referrer's list
+- has `keka_candidate_id` set — the push sweeper only picks rows where that is null, so
+  **it can never be pushed back into Keka as a duplicate**
+- has `keka_last_seen_at` set, so **TA's inbox does not ask for it**
+- keeps `keka_applied_on`, and its journey starts on that date, not the import date
+- stores an honest consent marker. The Hub showed no consent notice for it, and says so.
+  That is a D14 question for HR
+
+A referrer who has never signed in is still credited. Their employee row is created and
+becomes theirs at first sign-in, because sign-in matches on email. The domain trigger
+refuses anything outside the work domain.
+
+A Keka candidate who is already a Hub referral is recognised as `in_hub`, not duplicated.
+That is the normal case when TA copies a Hub referral into Keka from the inbox and tags it
+Employee Referral, as the inbox asks. It matches on Keka candidate id, or on email or phone
+within the validity window.
+
+### Two dates guard the money
+
+**`keka_referral_import_since` defaults to the day this shipped, not the start of time.** A
+referral made in Keka before the Hub may already have been rewarded under the old process.
+Importing it could pay it twice. Moving the date earlier is HR's call (**D18**). The date is
+read as midnight IST, and a referral with no date is not imported, because it cannot be shown
+to fall after the cutoff. A malformed setting fails the run rather than meaning "import
+everything".
+
+**Payment is still human.** `refresh_reward_states()` never approves anything (0007), so an
+imported referral that reaches Hired creates a reward an admin must approve before it is paid.
+
+### Scheduling, and why the stage sync changed
+
+The nightly cron is `full=1`, so every run re-reads everything. The scan and the stage sync
+read the same endpoint for the same jobs. Fetched separately, they would pass `maxDuration`
+(300s) once referrals span most open roles: 57 jobs × active and archived is 114 calls each,
+at 45 a minute. So both now read through **one cache per run** (`newCandidateCache()`), and
+a run is bounded by the number of open jobs, not the number of readers. `stages.ts` changed
+only in where its fetch happens.
+
+The scan also has a **deadline of three minutes** into the route. That leaves two for the
+stage sync, the reward engine and the pushes, which already existed and must not be starved.
+If it runs out, it keeps what it read, then **fails the run with the count** — convention 10,
+silence must mean healthy. Jobs are read in random order, so a short night never skips the
+same roles. **If that failure recurs, give the scan its own cron.**
+
+The run order is jobs → bands → **Keka referrals** → stages → rewards → pushes. So a
+referral found tonight gets its real stage, and its reward if it has joined, in the same run.
+
+### What was and was not verified
+
+- **Verified:** the rules (37 assertions), the database path and admin screen (47), and the
+  real `syncKekaReferrals` end to end. That last one was fed synthetic candidates through the
+  shared cache, with no Keka call — including that non-referral, pre-cutoff and undated
+  candidates are never stored, and that a screening answer's value (a salary) is never kept.
+- **Not verified: a live Keka tenant.** There are no Keka credentials on a development
+  machine (§16), so what Keka returns in production has not been seen by this code. The
+  first nightly run is that test. Check **Admin → Keka referrals → Last run**, and
+  `/admin/sync`, the morning after this ships.
+- **Not verified: timing.** The three-minute budget is an estimate from §16's figures, not a
+  measurement.
+
+### Tests
+
+| Command | Covers |
+| --- | --- |
+| `npm run keka:attribution` | 37 assertions on the rules. No database, no credentials |
+| `npm run e2e:keka-referrals` | 47 assertions: crediting, idempotency, new referrers, `in_hub`, races, domain refusal, stage tracking, the admin screen, 404 for a non-admin, the referrer's view |
+
+`e2e:admin` now covers `/admin/keka-referrals` too. `keka:check`, `e2e:stages`,
+`e2e:engine`, `e2e:bands`, `e2e-refer`, `e2e-scoping` and `e2e:resume` all pass after this
+change.

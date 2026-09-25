@@ -12,6 +12,9 @@ type Row = {
   current_stage: string | null;
   current_stage_at: string | null;
   submitted_at: string;
+  /** "keka" when the referral was made in Keka and brought in by the sync. */
+  origin: string;
+  keka_applied_on: string | null;
   joined_at: string | null;
   with_ta: boolean;
   reward_status: string | null;
@@ -42,7 +45,7 @@ export default async function ReferralsPage() {
       // to notice if it ever goes missing — run it when this file changes.
       rows = await query<Row>(
         `select r.id, r.ref_code, r.status, r.current_stage, r.current_stage_at,
-                r.submitted_at, r.reward_amount_snapshot, r.joined_at,
+                r.submitted_at, r.origin, r.keka_applied_on, r.reward_amount_snapshot, r.joined_at,
                 r.eligibility_days_snapshot,
                 (r.keka_candidate_id is not null or r.ta_added_at is not null) as with_ta,
                 w.status as reward_status, w.eligible_from, w.paid_at,
@@ -126,6 +129,11 @@ export default async function ReferralsPage() {
                   <p className="text-[13px] text-[var(--color-ink-3)]">
                     {r.job_title ?? "Role"}
                     {r.job_location ? ` · ${r.job_location}` : ""} · {r.ref_code}
+                    {r.origin === "keka" && (
+                      <span className="ml-1.5 rounded bg-[var(--color-ground)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--color-ink-2)]">
+                        Made in Keka
+                      </span>
+                    )}
                   </p>
                 </div>
                 <div className="text-right">
@@ -168,7 +176,7 @@ export default async function ReferralsPage() {
                 <p className="text-[12.5px] text-[var(--color-ink-3)]">
                   {r.current_stage_at
                     ? `Updated ${shortDate(r.current_stage_at)}`
-                    : `Referred ${shortDate(r.submitted_at)}`}{" "}
+                    : `Referred ${shortDate(r.keka_applied_on ?? r.submitted_at)}`}{" "}
                   ·{" "}
                   {r.stage_count === 1 ? "1 update" : `${r.stage_count} updates`}
                 </p>

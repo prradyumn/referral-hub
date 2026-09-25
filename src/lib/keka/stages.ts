@@ -18,8 +18,8 @@
  */
 
 import { query } from "@/lib/db";
-import { kekaList } from "@/lib/keka/client";
 import { parseKekaDate } from "@/lib/keka/map";
+import { jobCandidates, type CandidateCache } from "@/lib/keka/job-candidates";
 
 type KekaCandidate = {
   id?: string;
@@ -57,6 +57,8 @@ async function jobsWithReferrals(): Promise<string[]> {
 
 export async function syncReferralStages(
   since?: Date | null,
+  /** Shared with the Keka-referral import, so a job is read once per run. */
+  cache?: CandidateCache,
 ): Promise<StageSyncResult> {
   const jobIds = await jobsWithReferrals();
 
@@ -82,20 +84,7 @@ export async function syncReferralStages(
   }[] = [];
 
   for (const jobId of jobIds) {
-    const path = `/v1/hire/jobs/${encodeURIComponent(jobId)}/candidates`;
-    // ISO on the way in; Keka rejects epoch here with a 400. See §16.
-    const window = { lastModified: since ? since.toISOString() : undefined };
-
-    // Active and archived both. Keka hides archived candidates unless asked
-    // (isArchived defaults to false), and archiving is how a candidate is
-    // taken out of the process. Pulling active only meant a rejected referral
-    // stayed on its last stage in the Hub forever — the employee would watch
-    // "Interviewing" for months and never learn it had closed.
-    const [active, archived] = await Promise.all([
-      kekaList<KekaCandidate>(path, window),
-      kekaList<KekaCandidate>(path, { ...window, isArchived: true }),
-    ]);
-    const candidates = [...active, ...archived];
+    const candidates = await jobCandidates<KekaCandidate>(jobId, since, cache);
 
     result.read += candidates.length;
 

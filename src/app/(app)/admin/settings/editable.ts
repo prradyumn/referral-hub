@@ -118,5 +118,43 @@ export const EDITABLE: Editable[] = [
       "employee record instead.",
     kind: "text",
   },
+  {
+    key: "keka_import_referrals",
+    label: "Bring in referrals made in Keka",
+    help:
+      "When on, the nightly sync finds candidates Keka marks as Employee " +
+      "Referral and brings them into the Hub. Anything it cannot credit for " +
+      "certain waits under Admin → Keka referrals.",
+    kind: "boolean",
+  },
+  {
+    key: "keka_referrer_email_field",
+    label: "Keka field holding the referrer's work email",
+    help:
+      "Exactly as Keka names it. Empty means nothing is credited automatically " +
+      "and every Keka referral waits for an admin. Only set this to a field " +
+      "that holds the REFERRER's address — a field holding a hiring manager's " +
+      "or recruiter's would credit, and pay, the wrong person. The field names " +
+      "Keka has sent are listed on the Keka referrals page.",
+    kind: "text",
+  },
+  {
+    key: "keka_referral_import_since",
+    label: "Bring in Keka referrals made on or after",
+    help:
+      "A date, YYYY-MM-DD. Referrals made in Keka before it are left alone, " +
+      "because they may already have been rewarded under the old process — " +
+      "moving it earlier risks paying someone twice. Takes effect at the next " +
+      "nightly sync.",
+    kind: "text",
+    validate: (v) => {
+      const t = v.trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(t)) return "Use a date like 2026-09-25.";
+      const d = new Date(`${t}T00:00:00Z`);
+      return Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== t
+        ? "That isn't a real date."
+        : null;
+    },
+  },
 ];
 

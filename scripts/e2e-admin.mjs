@@ -22,7 +22,7 @@ const BASE = process.env.SHOOT_BASE ?? "http://localhost:3000";
 const COOKIE = "authjs.session-token";
 const ADMIN = `e2e_admin_${Date.now()}@convegenius.ai`;
 const PLAIN = `e2e_plain_${Date.now()}@convegenius.ai`;
-const ADMIN_ROUTES = ["/admin/inbox", "/admin/rewards", "/admin/sync", "/admin/pipeline", "/admin/settings"];
+const ADMIN_ROUTES = ["/admin/inbox", "/admin/keka-referrals", "/admin/rewards", "/admin/sync", "/admin/pipeline", "/admin/settings"];
 
 const db = new pg.Client({
   connectionString: process.env.DATABASE_URL,

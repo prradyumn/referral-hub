@@ -8,7 +8,7 @@
 
 import { query, queryOne } from "@/lib/db";
 
-export type SyncResource = "jobs" | "candidates" | "employees";
+export type SyncResource = "jobs" | "candidates" | "employees" | "referrals";
 
 export type SyncOutcome = {
   read: number;

@@ -16,6 +16,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { syncJobs, reconcileJobs } from "@/lib/keka/jobs";
 import { sweepPendingPushes, pushEnabled } from "@/lib/keka/candidates";
 import { syncReferralStages } from "@/lib/keka/stages";
+import { syncKekaReferrals } from "@/lib/keka/referrals";
+import { newCandidateCache } from "@/lib/keka/job-candidates";
 import { recordedSync } from "@/lib/keka/sync";
 import { query } from "@/lib/db";
 import { applyBands, type BandApplyResult } from "@/lib/band-apply";
@@ -115,13 +117,33 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // One fetch per job for the rest of this run. The Keka-referral import and
+  // the stage sync read the same endpoint for the same jobs; fetched twice,
+  // the pair would pass maxDuration once referrals span most open roles.
+  const candidates = newCandidateCache();
+
+  // ---- referrals made in Keka --------------------------------------------
+  // Before the stage sync, so a referral found in Keka tonight gets its real
+  // stages — and, if it has reached Hired, its reward — in this same run.
+  const kekaReferrals = await recordedSync(
+    "referrals",
+    async (since) => {
+      // Stop reading new roles three minutes in, leaving two for the stage
+      // sync, the reward engine and the pushes, which exist already and must
+      // not be starved by this one.
+      const r = await syncKekaReferrals(full ? null : since, candidates, started + 180_000);
+      return { read: r.read, written: r.written, watermark: r.watermark, detail: r };
+    },
+    { full },
+  );
+
   // ---- candidate stages -------------------------------------------------
   // Only polls jobs the Hub has referrals against, so this costs nothing
   // until someone has actually referred a person.
   const stages = await recordedSync(
     "candidates",
     async (since) => {
-      const r = await syncReferralStages(full ? null : since);
+      const r = await syncReferralStages(full ? null : since, candidates);
       return { read: r.read, written: r.written, watermark: r.watermark, detail: r };
     },
     { full },
@@ -157,7 +179,9 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const ok = !jobs.error && !bandError && !stages.error && !reconcileError && !pushError && !rewardError;
+  const ok =
+    !jobs.error && !bandError && !kekaReferrals.error && !stages.error &&
+    !reconcileError && !pushError && !rewardError;
 
   return NextResponse.json(
     {
@@ -172,6 +196,11 @@ export async function GET(request: NextRequest) {
         error: jobs.error?.message ?? null,
       },
       bands: bands ?? (bandError ? { error: bandError } : null),
+      kekaReferrals: {
+        status: kekaReferrals.run.status,
+        detail: kekaReferrals.result ? (kekaReferrals.result as { detail: unknown }).detail : null,
+        error: kekaReferrals.error?.message ?? null,
+      },
       stages: {
         status: stages.run.status,
         detail: stages.result ? (stages.result as { detail: unknown }).detail : null,
