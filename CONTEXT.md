@@ -1297,6 +1297,8 @@ real alerting exists.
 | `npm run e2e:resume` | 58 assertions: CV checks, storage, admin-only download, append-only audit (§25) |
 | `npm run keka:attribution` | 37 assertions: who a Keka referral is credited to, and who it never is (§26) |
 | `npm run e2e:keka-referrals` | 47 assertions: Keka referrals into the Hub, admin review, referrer's view (§26) |
+| `npm run race:check` | 16 assertions: the leaderboard circuit's geometry and car placement (§27) |
+| `npm run e2e:leaderboard` | 25 assertions: HR history import, combined ranking, the race page (§27) |
 
 ---
 
@@ -1984,3 +1986,126 @@ referral found tonight gets its real stage, and its reward if it has joined, in 
 `e2e:admin` now covers `/admin/keka-referrals` too. `keka:check`, `e2e:stages`,
 `e2e:engine`, `e2e:bands`, `e2e-refer`, `e2e-scoping` and `e2e:resume` all pass after this
 change.
+
+---
+
+## 27. The leaderboard: a race, with HR's history since 2023 — 25 September 2026
+
+The leaderboard is now a race. Each of the top eight referrers is a car on a winding
+circuit, placed by how many of their referrals joined, with a standings table beneath it
+holding every figure. It also carries **HR's record of referral bonuses since October
+2023**, so the board is full on its first day instead of empty until the Hub's own
+referrals start joining.
+
+### The history
+
+HR's sheet — **"Copy of sheet 3" is the master** — was loaded into `historical_referrals`
+(db/0019) by `npm run history:import`. The result: 62 referrals by 40 referrers, joined
+9 Oct 2023 → 17 Aug 2026. 49 bonuses paid, 9 owed, 4 forfeited, ₹6,95,000.
+
+- **"Recruiter" in that sheet is the referrer**, not a TA recruiter. It is who the bonus
+  in *Amount INR* and *Status* was paid to, and none of the 40 hold a recruitment title. If
+  a future sheet uses the column differently, change that one line in the import script.
+- **Sheet1 contradicts the master.** It names a different referrer for every one of its 23
+  candidates. With the master chosen, Sheet1 is treated as out of date. Worth telling HR in
+  case anyone still reads it.
+- **Sheet6 is not referral data** — it lists phone numbers and photo links. It was not
+  imported.
+- **The CSVs are gitignored** (`/Referral_Data_CSVs/`, `*.xlsx`). They hold real names and
+  must never reach git history.
+
+**This history is for recognition only.** It is not part of the reward ledger and never
+touches `referral_rewards`. Those bonuses were settled — or not — under the old process,
+and nothing here can cause one to be paid again (D18).
+
+**Minimisation (§9).** Only what a ranking needs is stored: referrer name and designation,
+dates, amount, payout status. No candidate name, phone, job title or employment status.
+`candidate_key` is an md5 of the normalised candidate name. It exists so one hire is not
+counted twice; it is not a way to read the name back. It is pseudonymous, not anonymous:
+anyone who already has a name can test it against the key. Checked after import: no
+candidate name appears in any stored column. Three names match *referrers* — people hired
+through a referral who later referred others, stored only in that role.
+
+The import is all-or-nothing, and it re-runs by updating rows rather than duplicating
+them. It stops on an unrecognised *Status*, because status decides whether a bonus counts
+as earned, and that is not something to guess. It also stops on a single unreadable date.
+
+### How the two sources combine
+
+`leaderboard()` in `src/lib/rewards.ts` ranks Hub referrals and history together, under
+the existing rule — referrals that **joined** in the period, then amount earned. Three
+rules keep the two sources honest together:
+
+- **A sheet name joins a Hub account only when exactly one employee has that name.** Two
+  people called Priya Sharma stay two people. Merging them would hand one the other's
+  referrals on a public board. Matching uses `name_key()`: letters only, words sorted, so
+  "S. Gokul" = "gokul s".
+- **A hire in both counts once**, from the Hub: the same candidate key, with joining dates
+  within 45 days of each other.
+- **Forfeited rewards no longer count as earned.** The previous query summed a reward even
+  after it was forfeited because the candidate left early. That was a latent bug, fixed in
+  passing. Owed bonuses do count: they were earned, just not yet paid.
+
+The page defaults to **This year**, not this month. Hires do not land every month, and the
+real history leaves "This month" empty — a board that opens on an empty track is a worse
+first impression than no board at all. Periods are calendar-based, as before. Whether the
+programme's year should be the financial year (April–March) is part of **D12**.
+
+### The race
+
+| Piece | File |
+| --- | --- |
+| Circuit geometry and car placement — pure, testable in Node | `src/lib/race-track.ts` |
+| The animated track | `src/components/RaceTrack.tsx` |
+| Styles and keyframes, all behind `prefers-reduced-motion` | `src/app/globals.css` (race track block) |
+
+**Vector, drawn in code. No image assets.** The track, cars, kerbs, flag and lights are
+inline SVG built from the same geometry that places the cars. That keeps it crisp at any
+size and themeable, costs no network requests, and puts every car exactly on the curve.
+
+**Point to point, not a loop.** On a loop, the finish line sits on the start line, so the
+leader would appear to be right behind the car in last place.
+
+**Colour is emphasis, not identity.** The dataviz rule for "eight hues when the story is one
+number" is to highlight one and grey the rest. Eight identity colours would also fail
+all-pairs colour-blind separation, since any car can sit beside any other. So everyone races
+in a muted slate livery, **the leader is gold (`#c98500`) and you are mint (`#199e70`)**.
+Both are the reference palette's validated dark steps, and every check passes on the
+asphalt, all pairs. Each also carries a label — the trophy on the leader, "(you)" — and
+there is a legend, so colour never carries meaning alone.
+
+**Distance is proportional to joins.** It is honest, not flattering: someone on 1 against a
+leader on 11 really is a long way back. Ties sit side by side, then a car length back, as a
+grid. Only the podium and you get name tags; everyone else gets a numbered badge. Tags
+steer clear of cars, badges and fixed labels, and stay inside the drawing.
+
+**The animation.**
+- F1 start lights before the first race.
+- The field starts from a staggered grid behind the line.
+- Cars accelerate and brake along the curve, with speed trails that fade as they slow.
+- Counts tick up as the cars drive.
+- The leader has a pulsing halo, and confetti falls when they cross the line.
+- Changing period re-races the same cars from where they stand to their new places.
+- With reduced motion set, the finished race is drawn and nothing moves.
+
+**Two traps fixed on the way, both worth knowing:**
+- **Raw floats in markup break hydration.** The server and the browser did not agree on the
+  16th digit of `Math.atan2`, so `rotate(9.473918357395517)` against `…515` failed
+  hydration. Every coordinate that reaches markup is rounded to one decimal (`n1()`).
+- **Strict Mode mounts twice in development.** A "first race" flag flipped on the discarded
+  mount made the real one skip the start lights. It now flips only once the race actually
+  starts.
+
+The standings table is the dataviz "table twin": every value on the track, readable without
+it. The race has an SVG `<title>` and `<desc>` naming the leader.
+
+### Tests
+
+| Command | Covers |
+| --- | --- |
+| `npm run race:check` | 16 assertions: geometry, proportional placement, ties, no overlaps, the grid |
+| `npm run e2e:leaderboard` | 25 assertions: import minimisation and refusals, forfeited vs owed, unique-name linking, double-count prevention, periods, gold and mint on the page, no console errors |
+
+Everything else passes after this change: `keka:check`, `keka:attribution`, `e2e:admin`,
+`e2e:stages`, `e2e:engine`, `e2e:bands`, `e2e:keka-referrals`, `e2e:resume`, `e2e-refer`,
+`e2e-scoping`.

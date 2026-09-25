@@ -201,12 +201,18 @@ export const LEADERBOARD_PERIODS: { id: LeaderboardPeriod; label: string }[] = [
 ];
 
 export type LeaderboardRow = {
-  employee_id: string;
+  /** Stable per person: the employee id, or "name:<key>" for someone only in the history. */
+  person_key: string;
+  /** Null for someone who appears only in HR's pre-Hub sheet and has no account. */
+  employee_id: string | null;
   name: string;
+  /** Their department, or for someone known only from the sheet, their designation. */
   department: string | null;
   joined: number;
   earned: number;
 };
+
+export type LeaderboardSummary = { people: number; joined: number; earned: number };
 
 const PERIOD_SQL: Record<LeaderboardPeriod, string> = {
   monthly: "date_trunc('month', now())",
@@ -214,6 +220,64 @@ const PERIOD_SQL: Record<LeaderboardPeriod, string> = {
   yearly: "date_trunc('year', now())",
   "all-time": "'-infinity'::timestamptz",
 };
+
+/**
+ * Every join that counts, from the Hub and from HR's pre-Hub sheet (db/0019).
+ *
+ * Three rules keep the two sources honest together:
+ *
+ *   · A sheet name joins a Hub account only when exactly one employee has that
+ *     name. Two people called Priya Sharma stay two people: merging them
+ *     would hand one the other's referrals on a public board.
+ *   · A hire in both — the sheet and the Hub — counts once, from the Hub. Same
+ *     candidate key, joining dates within 45 days.
+ *   · Earned excludes forfeited rewards. A reward forfeited because the
+ *     candidate left early was never earned, and used to be summed anyway.
+ */
+const JOINS_SQL = `
+  with hub as (
+    select e.id::text                                          as person_key,
+           e.id                                                as employee_id,
+           coalesce(e.full_name, split_part(e.email, '@', 1))  as name,
+           e.department                                        as unit,
+           r.joined_at::date                                   as joined_on,
+           case when r.reward_confirmed_snapshot and w.status is distinct from 'forfeited'
+                then coalesce(w.amount, 0) else 0 end          as amount,
+           md5(name_key(c.full_name))                          as candidate_key,
+           0                                                   as src
+      from referrals r
+      join employees  e on e.id = r.referrer_id
+      join candidates c on c.id = r.candidate_id
+      left join referral_rewards w on w.referral_id = r.id
+     where r.joined_at is not null
+  ),
+  unique_names as (
+    select name_key(full_name) as k, min(id::text) as id
+      from employees
+     where full_name is not null and name_key(full_name) <> ''
+     group by 1
+    having count(*) = 1
+  ),
+  hist as (
+    select coalesce(u.id, 'name:' || h.referrer_key)           as person_key,
+           u.id::uuid                                          as employee_id,
+           h.referrer_name                                     as name,
+           h.referrer_designation                              as unit,
+           h.joined_on,
+           case when h.payout_status in ('paid', 'owed')
+                then coalesce(h.amount_inr, 0) else 0 end      as amount,
+           h.candidate_key,
+           1                                                   as src
+      from historical_referrals h
+      left join unique_names u on u.k = h.referrer_key
+     where not exists (
+             select 1 from hub
+              where hub.candidate_key = h.candidate_key
+                and abs(hub.joined_on - h.joined_on) <= 45)
+  ),
+  joins as (
+    select * from hub union all select * from hist
+  )`;
 
 /**
  * Who has brought the most people in.
@@ -231,22 +295,42 @@ export async function leaderboard(
   limit = 10,
 ): Promise<LeaderboardRow[]> {
   return query<LeaderboardRow>(
-    `select e.id                             as employee_id,
-            coalesce(e.full_name, split_part(e.email, '@', 1)) as name,
-            e.department,
-            count(*)::int                    as joined,
-            coalesce(sum(w.amount) filter (
-              where r.reward_confirmed_snapshot), 0)::int as earned
-       from referrals r
-       join employees e on e.id = r.referrer_id
-       left join referral_rewards w on w.referral_id = r.id
-      where r.joined_at is not null
-        and r.joined_at >= ${PERIOD_SQL[period]}
-      group by e.id, e.full_name, e.email, e.department
+    `${JOINS_SQL}
+     select person_key,
+            (array_agg(employee_id) filter (where employee_id is not null))[1]           as employee_id,
+            -- The account's own name where there is one, else the latest spelling in the sheet.
+            (array_agg(name order by src, joined_on desc))[1]                             as name,
+            (array_agg(unit order by src, joined_on desc) filter (where unit is not null))[1] as department,
+            count(*)::int                                                                  as joined,
+            sum(amount)::int                                                               as earned
+       from joins
+      where joined_on >= (${PERIOD_SQL[period]})::date
+      group by person_key
       order by joined desc, earned desc, name
       limit $1`,
     [limit],
   );
+}
+
+/** The totals behind a period, for the headline over the board. */
+export async function leaderboardSummary(period: LeaderboardPeriod): Promise<LeaderboardSummary> {
+  const row = await queryOne<LeaderboardSummary>(
+    `${JOINS_SQL}
+     select count(distinct person_key)::int as people,
+            count(*)::int                   as joined,
+            coalesce(sum(amount), 0)::int   as earned
+       from joins
+      where joined_on >= (${PERIOD_SQL[period]})::date`,
+  );
+  return row ?? { people: 0, joined: 0, earned: 0 };
+}
+
+/** When HR's pre-Hub history starts, for the note under the board. Null if none was imported. */
+export async function historySince(): Promise<string | null> {
+  const row = await queryOne<{ since: string | null }>(
+    `select to_char(min(joined_on), 'YYYY-MM-DD') as since from historical_referrals`,
+  );
+  return row?.since ?? null;
 }
 
 export async function leaderboardEnabled(): Promise<boolean> {

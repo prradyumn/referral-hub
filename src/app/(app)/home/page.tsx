@@ -250,7 +250,7 @@ export default async function HomePage() {
           <ol className="grid gap-2 sm:grid-cols-3">
             {top3.map((p, i) => (
               <li
-                key={p.employee_id}
+                key={p.person_key}
                 className="flex items-center gap-3 rounded-lg border border-[var(--color-line)] px-3.5 py-3"
               >
                 <span

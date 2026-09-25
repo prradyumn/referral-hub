@@ -19,7 +19,10 @@
     "e2e:bands": "node --env-file=.env.local scripts/e2e-bands.mjs",
     "e2e:resume": "node --env-file=.env.local scripts/e2e-resume.mjs",
     "keka:attribution": "node scripts/keka-attribution-check.mjs",
-    "e2e:keka-referrals": "node --env-file=.env.local scripts/e2e-keka-referrals.mjs"
+    "e2e:keka-referrals": "node --env-file=.env.local scripts/e2e-keka-referrals.mjs",
+    "race:check": "node scripts/race-track-check.mjs",
+    "e2e:leaderboard": "node --env-file=.env.local scripts/e2e-leaderboard.mjs",
+    "history:import": "node --env-file=.env.local scripts/import-history.mjs"
   },
   "dependencies": {
     "next": "^16.3.5",

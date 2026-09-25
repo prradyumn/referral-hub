@@ -16,3 +16,8 @@ next-env.d.ts
 /.pw-profile
 .vercel
 /.screenshots
+
+# Real referral records, imported into the database by scripts/import-history.mjs.
+# Never commit: candidate and employee names, phone numbers.
+/Referral_Data_CSVs/
+*.xlsx
