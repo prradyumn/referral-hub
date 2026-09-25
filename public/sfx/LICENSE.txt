@@ -4,5 +4,11 @@ engine-loop.wav
   Licence: CC0 1.0 (public domain dedication). No attribution required;
   credited anyway. Derived from a public-domain recording on pdsounds.org.
 
+flyby.mp3
+  "V8 Supercar fly-by", by FFKoenigsegg20012017 on Freesound
+  https://freesound.org/people/FFKoenigsegg20012017/sounds/339136/
+  Licence: CC0 1.0 (public domain dedication). No attribution required;
+  credited anyway. This is Freesound's high-quality MP3 preview of it.
+
 The start-light beeps and the finish chime are synthesised in the browser
 (src/lib/race-sound.ts) and are not files.

@@ -178,8 +178,10 @@ try {
   check(packs.some((t) => /3–4\s*2 tied on 1/.test(t)), `a tie is one pack label (${packs.join(" / ") || "none"})`);
   const badges = await page.locator("svg.race .race-badge-text").allTextContents();
   check(!badges.includes("4"), "and the cars in it carry no badge of their own");
-  const sfx = await page.request.get(`${BASE}/sfx/engine-loop.wav`);
-  check(sfx.ok() && /audio/.test(sfx.headers()["content-type"] ?? ""), "the engine sound is served to a signed-in user");
+  for (const f of ["engine-loop.wav", "flyby.mp3"]) {
+    const sfx = await page.request.get(`${BASE}/sfx/${f}`);
+    check(sfx.ok() && /audio/.test(sfx.headers()["content-type"] ?? ""), `${f} is served to a signed-in user`);
+  }
   check(errors.length === 0, `no console errors${errors.length ? `: ${errors.join(" | ")}` : ""}`);
 } catch (e) {
   failures++;

@@ -2097,6 +2097,11 @@ hear it. Both buttons are hidden with reduced motion, since nothing races.
   the licence note is in `public/sfx/LICENSE.txt`. It is 76 KB.
 - One loop plays as two voices a fifth apart, pitched up and filtered brighter as the
   field speeds up, then fades as the cars brake.
+- A real **fly-by** plays over it: a V8 roaring past, from Freesound
+  ("V8 Supercar fly-by", **CC0**, `public/sfx/flyby.mp3`, 29 KB). It plays twice: at
+  lights out, panned left where the field launches, and as the leader brakes into the
+  line, panned right. The Formula 1 fly-bys found alongside it are CC-BY, which needs
+  credit on the page, so they were not used.
 - The start-light beeps and the two-note finish chime are simple tones, synthesised with
   Web Audio (`src/lib/race-sound.ts`), not files.
 - Browsers only allow sound after a click, so the audio starts from the button. A race
@@ -2114,6 +2119,8 @@ ran into the tile's edge.
 - Counts tick up as the cars drive.
 - The leader has a pulsing halo, and confetti falls when they cross the line.
 - Changing period re-races the same cars from where they stand to their new places.
+- **Pace:** the leader takes about six seconds, and the cars leave 140 ms apart. The first
+  version ran twice as fast, which people read as a blur.
 - With reduced motion set, the finished race is drawn and nothing moves.
 
 **Two traps fixed on the way, both worth knowing:**

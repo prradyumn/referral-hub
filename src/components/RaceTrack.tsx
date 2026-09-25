@@ -245,8 +245,11 @@ export default function RaceTrack({ racers, periodLabel }: { racers: Racer[]; pe
         c,
         from,
         to: c.spot,
-        delay: i * 70,
-        dur: 1300 + 2100 * dist,
+        // About twice the first version's pace, which read as a blur: the
+        // leader now takes six seconds or so, and the field peels away one
+        // car at a time.
+        delay: i * 140,
+        dur: 2600 + 4200 * dist,
         fromCount: shownCount.current.get(c.key) ?? 0,
       };
     });
@@ -274,6 +277,7 @@ export default function RaceTrack({ racers, periodLabel }: { racers: Racer[]; pe
       const t0 = performance.now();
       const prev = new Map<string, number>();
       let last = t0;
+      let flewBy = false;
       engine = raceSound.engine();
       const step = (now: number) => {
         let moving = false;
@@ -293,8 +297,14 @@ export default function RaceTrack({ racers, periodLabel }: { racers: Racer[]; pe
           shownCount.current.set(p.c.key, count);
           if (k < 1) moving = true;
         }
-        // Flat out is about 4e-4 of the track a millisecond — the leader, mid-race.
-        engine?.rev(fastest / 4e-4);
+        // Flat out is about 2e-4 of the track a millisecond — the leader, mid-race.
+        engine?.rev(fastest / 2e-4);
+        // The leader braking into the line gets the roar-past, from the right.
+        const lead = plans[0];
+        if (!flewBy && layout.leaderKey && lead && now - t0 - lead.delay > lead.dur * 0.8) {
+          flewBy = true;
+          raceSound.flyby((FINISH.x / VIEW.w) * 2 - 1);
+        }
         if (moving) frame.current = requestAnimationFrame(step);
         else {
           frame.current = null;
@@ -328,6 +338,8 @@ export default function RaceTrack({ racers, periodLabel }: { racers: Racer[]; pe
           first.current = false;
           setLights(6);
           raceSound.go();
+          // Lights out: the field launching, from the left.
+          raceSound.flyby((START.x / VIEW.w) * 2 - 1, 0.7);
           drive();
         }, 200 + 5 * 260 + 420),
       );

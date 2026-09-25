@@ -7,18 +7,20 @@
  * started from the toggle; a race that begins before any click just runs
  * silently.
  *
- * The engine is a recording: public/sfx/engine-loop.wav, CC0 (see the
- * LICENSE.txt beside it), looped and pitched up as the field speeds up. The
- * start-light beeps and the finish chime are simple tones, so they are
+ * Two recordings, both CC0 (see the LICENSE.txt beside them):
+ *   public/sfx/engine-loop.wav — looped, pitched up as the field speeds up
+ *   public/sfx/flyby.mp3       — a V8 roaring past: the launch, and the leader
+ *                                crossing the line
+ * The start-light beeps and the finish chime are simple tones, so they are
  * synthesised here rather than downloaded.
  */
 
 const KEY = "referral-hub:race-sound";
-const ENGINE_URL = "/sfx/engine-loop.wav";
+const FILES = { engine: "/sfx/engine-loop.wav", flyby: "/sfx/flyby.mp3" } as const;
 
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
-let buffer: AudioBuffer | null = null;
+const buffers: Partial<Record<keyof typeof FILES, AudioBuffer>> = {};
 let loading: Promise<void> | null = null;
 /** When storage is blocked the toggle still works, for this page. */
 let memo: boolean | null = null;
@@ -45,14 +47,19 @@ async function ensure(): Promise<void> {
     master.connect(ctx.destination);
   }
   if (ctx.state === "suspended") await ctx.resume().catch(() => {});
-  if (!buffer && !loading) {
+  if (!loading && Object.keys(buffers).length < Object.keys(FILES).length) {
     const c = ctx;
-    loading = fetch(ENGINE_URL)
-      .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status)))))
-      .then((b) => c.decodeAudioData(b))
-      .then((b) => {
-        buffer = b;
-      })
+    loading = Promise.all(
+      (Object.keys(FILES) as (keyof typeof FILES)[]).map((k) =>
+        fetch(FILES[k])
+          .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status)))))
+          .then((b) => c.decodeAudioData(b))
+          .then((b) => {
+            buffers[k] = b;
+          }),
+      ),
+    )
+      .then(() => {})
       .catch(() => {
         loading = null; // try again next time
       });
@@ -120,7 +127,22 @@ export const raceSound = {
     tone(1240, ctx!.currentTime, 0.34, 0.26, "square");
   },
 
-  /** The leader crossing the line. */
+  /** A car roaring past. `pan` from −1 (left) to 1 (right) follows it across the screen. */
+  flyby(pan = 0, level = 0.9) {
+    const b = buffers.flyby;
+    if (!live() || !b) return;
+    const c = ctx!;
+    const s = c.createBufferSource();
+    s.buffer = b;
+    const g = c.createGain();
+    g.gain.value = level;
+    const p = c.createStereoPanner();
+    p.pan.setValueAtTime(Math.max(-1, Math.min(1, pan)) * 0.6, c.currentTime);
+    s.connect(g).connect(p).connect(master!);
+    s.start();
+  },
+
+  /** The race is over. */
   finish() {
     if (!live()) return;
     const t = ctx!.currentTime;
@@ -134,6 +156,7 @@ export const raceSound = {
    * speed keeps the idle from sounding like a hairdryer.
    */
   engine(): Engine {
+    const buffer = buffers.engine;
     if (!live() || !buffer) return SILENT;
     const c = ctx!;
     const out = c.createGain();
