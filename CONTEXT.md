@@ -1254,8 +1254,17 @@ and `scripts/e2e-admin.mjs` proves a non-admin is refused at both the route and 
 predicate. **Run it whenever anything under `/admin` changes.**
 
 Admin is granted by `employees.is_admin`, with `app_settings.admin_emails` as a bootstrap
-so a database can never lock itself out. `pradyumn@convegenius.ai` is currently the only
-admin.
+so a database can never lock itself out.
+
+**Admins, as of 25 September 2026: `pradyumn@convegenius.ai` and `gokul@convegenius.ai`.**
+Both are granted on the employee record (`is_admin`); `admin_emails` is empty. Admin status
+is read fresh on every request, so granting or removing it takes effect immediately, with no
+sign-out needed.
+
+To grant someone else, set `is_admin = true` on their `employees` row. If they have never
+signed in, insert the row first: the sign-in upsert only fills in `full_name`, so `is_admin`
+survives their first login. There is no screen for this yet, and no audit of who granted
+it — both are worth adding before admin is given to anyone outside the core team.
 
 ### Rewards are now HR's to set, not a spreadsheet request
 
