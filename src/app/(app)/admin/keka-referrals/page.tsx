@@ -4,6 +4,11 @@ import { requireAdmin } from "@/lib/admin";
 import { shortDate } from "@/lib/format";
 import { PageHead, Card } from "@/components/Chrome";
 import AdminNav from "../AdminNav";
+import SyncNowButton from "../SyncNowButton";
+
+// The "Sync now" action runs on this page, and a full Keka sync takes 2–3
+// minutes. Server Actions take their timeout from the page that uses them.
+export const maxDuration = 300;
 import { CreditForm, DismissButton } from "./KekaReferralActions";
 
 type Row = {
@@ -122,7 +127,7 @@ export default async function KekaReferralsPage({
                 {lastRun.error && <span className="block text-[12px] text-[var(--color-danger)]">{lastRun.error}</span>}
               </>
             ) : (
-              "Not yet — it runs nightly at 08:00 IST"
+              "Not yet — it runs daily at 08:00 IST, or use Sync now"
             )}
           </Fact>
           <Fact k="Automatic crediting">
@@ -133,6 +138,10 @@ export default async function KekaReferralsPage({
             )}
           </Fact>
         </dl>
+
+        <div className="mt-3 border-t border-[var(--color-line)] pt-3">
+          <SyncNowButton />
+        </div>
 
         {!field && (
           <p className="mt-3 border-t border-[var(--color-line)] pt-3 text-[13px] leading-relaxed text-[var(--color-ink-2)]">
@@ -195,7 +204,7 @@ export default async function KekaReferralsPage({
           <p className="mx-auto mt-2 max-w-[46ch] text-[14px] leading-relaxed text-[var(--color-ink-3)]">
             {tab.key === "review"
               ? "Every referral made in Keka since the import date has been credited or settled."
-              : "Keka referrals appear here after the nightly sync."}
+              : "Keka referrals appear here after the daily sync, or straight away with Sync now."}
           </p>
         </div>
       ) : (

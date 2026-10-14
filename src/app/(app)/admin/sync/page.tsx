@@ -4,6 +4,11 @@ import { syncHealth } from "@/lib/keka/sync";
 import { shortDate } from "@/lib/format";
 import { PageHead, Card } from "@/components/Chrome";
 import AdminNav from "../AdminNav";
+import SyncNowButton from "../SyncNowButton";
+
+// The "Sync now" action runs on this page, and a full Keka sync takes 2–3
+// minutes. Server Actions take their timeout from the page that uses them.
+export const maxDuration = 300;
 
 type Run = {
   id: string;
@@ -71,6 +76,10 @@ export default async function AdminSyncPage() {
         title="Integration health"
         lede="Every sync run is recorded, so silence means healthy rather than unnoticed."
       />
+
+      <Card className="mb-6">
+        <SyncNowButton />
+      </Card>
 
       {/* CONTEXT.md convention 10: a sync that has not succeeded in 24 hours
           raises an alert. This is that alert, until real alerting exists. */}
