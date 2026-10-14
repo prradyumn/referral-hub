@@ -22,6 +22,9 @@ const STEP_OF: Record<string, number> = {
   "Referral submitted": 0,
   "Profile shortlisted": 1,
   Interviewing: 2,
+  "First round of interview": 2,
+  "Second round of interview": 2,
+  "Third round of interview": 2,
   "Offer accepted": 3,
   Joined: 4,
 };
@@ -55,6 +58,15 @@ export function stepOf(stage: string | null): number {
   return stage ? (STEP_OF[stage] ?? 0) : 0;
 }
 
+/**
+ * The label for a step. The interviewing step names the round the candidate
+ * is in (db/0020) while they are in it; every other step keeps its own label.
+ */
+function labelFor(i: number, stage: string | null, current: boolean): string {
+  if (current && i === 2 && stage && stage !== STEPS[2] && STEP_OF[stage] === 2) return stage;
+  return STEPS[i];
+}
+
 function nextFor(p: Progress, step: number, closed: boolean): string {
   if (closed)
     return "They are no longer in process for this role. Thank you for the referral — if another role suits them better, you can refer them again.";
@@ -66,7 +78,7 @@ function nextFor(p: Progress, step: number, closed: boolean): string {
     case 1:
       return "The hiring team liked the profile. Next, interviews get scheduled.";
     case 2:
-      return "Interviews are under way. Feedback stays confidential, so you will only see the outcome.";
+      return "Interviews are under way. You will see each new round here as it starts. Feedback stays confidential, so you will only see the outcome.";
     case 3:
       return "They accepted the offer. Once they join, the reward countdown starts.";
     default:
@@ -119,14 +131,23 @@ export default function ReferralProgress({
     <div>
       <ol
         className="flex items-start"
-        aria-label={closed ? "Referral closed" : `Step ${step + 1} of ${STEPS.length}: ${STEPS[step]}`}
+        aria-label={
+          closed
+            ? "Referral closed"
+            : `Step ${step + 1} of ${STEPS.length}: ${labelFor(step, p.current_stage, true)}`
+        }
       >
-        {STEPS.map((label, i) => {
+        {STEPS.map((stepName, i) => {
           const done = i < step || (i === step && i === 4);
           const now = i === step && !closed && i !== 4;
           const current = i === step && !closed;
+          const label = labelFor(i, p.current_stage, current);
+          // A round name is longer than the column it sits in. On a phone it
+          // is the only label shown, so it stays on one line; on a desktop
+          // its neighbours are labelled too, so it wraps instead.
+          const long = label !== stepName;
           return (
-            <li key={label} className="relative flex min-w-0 flex-1 flex-col items-center text-center">
+            <li key={stepName} className="relative flex min-w-0 flex-1 flex-col items-center text-center">
               {/* The line into this step. On a phone only the current step is
                   labelled: five labels in 350px ran into each other. */}
               {i > 0 && (
@@ -161,7 +182,7 @@ export default function ReferralProgress({
               <span
                 className={`mt-1.5 px-0.5 text-[11px] leading-tight sm:text-[12px] ${
                   now ? "font-semibold text-[var(--color-brand)]" : i <= step && !closed ? "text-[var(--color-ink)]" : "text-[var(--color-ink-3)]"
-                } ${!current ? "max-sm:sr-only" : "whitespace-nowrap"}`}
+                } ${!current ? "max-sm:sr-only" : long ? "max-sm:whitespace-nowrap" : "whitespace-nowrap"}`}
               >
                 {label}
                 {now && <span className="sr-only"> (current step)</span>}

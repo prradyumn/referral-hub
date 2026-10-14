@@ -1844,6 +1844,12 @@ migration to `do nothing`.
 
 For this reason db/0017 was applied on its own, not by a full replay.
 
+**Update, 8 Oct 2026:** db/0006 now inserts with `do nothing`. db/0020 names the
+interview rounds for the referrer — Interview L1/L2/L3 read "First / Second / Third round
+of interview" instead of one "Interviewing" (D15, HR's answer) — and a replay of 0006
+would otherwise have put "Interviewing" back. The progress bar's Interviewing step shows
+the round as its label while the candidate is in it. 0012, 0013 and 0014 still `do update`.
+
 ### Tests
 
 `npm run e2e:resume` — 58 assertions, in a real browser against the real form:

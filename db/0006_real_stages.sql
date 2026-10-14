@@ -15,6 +15,11 @@
 -- phrase. Which round a candidate is on is process detail the referrer has no
 -- need for, and commitment 2 keeps the inside of the process inside. Still
 -- provisional until D15.
+--
+-- `do nothing` since 0020: npm run db:apply replays every file, and `do
+-- update` here put this wording back over 0020's interview rounds — and over
+-- any wording changed later — on every run. Changes to wording belong in a new
+-- migration.
 
 begin;
 
@@ -28,13 +33,7 @@ values
   ('Interview L3', 'Interview L3', 'Interviewing',         true,  false, 32),
   ('Preboarding',  'Preboarding',  'Offer accepted',       true,  true,  40),
   ('Hired',        'Hired',        'Joined',               true,  true,  50)
-on conflict (keka_stage_id) do update set
-  keka_stage_name  = excluded.keka_stage_name,
-  employee_wording = excluded.employee_wording,
-  is_visible       = excluded.is_visible,
-  notifies         = excluded.notifies,
-  sort_order       = excluded.sort_order,
-  updated_at       = now();
+on conflict (keka_stage_id) do nothing;
 
 -- Guesses that match nothing in this tenant. Removing them keeps the admin
 -- stage table an honest picture of what Keka actually sends.
