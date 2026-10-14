@@ -1963,6 +1963,15 @@ same roles. **If that failure recurs, give the scan its own cron.**
 The run order is jobs → bands → **Keka referrals** → stages → rewards → pushes. So a
 referral found tonight gets its real stage, and its reward if it has joined, in the same run.
 
+**Sync now (added 14 Oct 2026).** Admins have a "Sync with Keka now" button on
+`/admin/keka-referrals` and `/admin/sync`. It runs the same full run as the cron —
+both call `runKekaSync()` in `src/lib/keka/run.ts`, so there is one pipeline, not two.
+A click takes 2–3 minutes (Keka's 50/min limit, two calls per open role), so both pages
+set `maxDuration = 300`, which is what a Server Action's timeout follows. A run already
+in progress — a `running` row in `integration_sync_runs` under six minutes old — makes
+the button and the cron refuse rather than race it. A Keka referral still waits in
+*Needs review* for an admin to credit it until `keka_referrer_email_field` is set.
+
 ### What was and was not verified
 
 - **Verified:** the rules (37 assertions), the database path and admin screen (47), and the
